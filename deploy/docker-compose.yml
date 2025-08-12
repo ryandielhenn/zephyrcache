@@ -1,0 +1,27 @@
+services:
+  node1:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports: ["8081:8080"]
+    environment:
+      - NODE_ID=node1
+      - ADDR=:8080
+
+  node2:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports: ["8082:8080"]
+    environment:
+      - NODE_ID=node2
+      - ADDR=:8080
+
+  node3:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports: ["8083:8080"]
+    environment:
+      - NODE_ID=node3
+      - ADDR=:8080
