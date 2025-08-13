@@ -3,6 +3,7 @@ package ring
 import (
 	"encoding/binary"
 	"hash/fnv"
+	"slices"
 	"sort"
 	"sync"
 )
@@ -40,7 +41,7 @@ func (r *HashRing) Add(nodeID, addr string) {
 		r.owners[pt] = nodeID
 		r.points = append(r.points, pt)
 	}
-	sort.Slice(r.points, func(i, j int) bool { return r.points[i] < r.points[j] })
+	slices.Sort(r.points)
 }
 
 func (r *HashRing) Remove(nodeID string) {
@@ -58,7 +59,7 @@ func (r *HashRing) Remove(nodeID string) {
 			r.points = append(r.points, pt)
 		}
 	}
-	sort.Slice(r.points, func(i, j int) bool { return r.points[i] < r.points[j] })
+	slices.Sort(r.points)
 }
 
 func (r *HashRing) Lookup(key []byte) string {
