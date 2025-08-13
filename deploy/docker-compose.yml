@@ -1,29 +1,47 @@
 services:
   etcd:
     image: quay.io/coreos/etcd:v3.5.15
-    command: >
-      /usr/local/bin/etcd
-      --name etcd0
-      --advertise-client-urls http://0.0.0.0:2379
-      --listen-client-urls http://0.0.0.0:2379
-      --initial-advertise-peer-urls http://0.0.0.0:2380
-      --listen-peer-urls http://0.0.0.0:2380
-      --initial-cluster etcd0=http://0.0.0.0:2380
-      --initial-cluster-state new
+    command:
+      - /usr/local/bin/etcd
+      - --name=etcd0
+      - --data-dir=/etcd-data
+      - --advertise-client-urls=http://etcd:2379
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --initial-advertise-peer-urls=http://etcd:2380
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --initial-cluster=etcd0=http://etcd:2380
+      - --initial-cluster-state=new
+      - --logger=zap
+      - --log-level=warn
+      # - --auth-token=jwt   # uncomment if/when you enable auth
     ports:
       - "2379:2379"
+      - "2380:2380"
+    volumes:
+      - etcd-data:/etcd-data
+    healthcheck:
+      test: ["CMD", "etcdctl", "--endpoints=http://127.0.0.1:2379", "endpoint", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   node1:
     build:
       context: ..
-      dockerfile: Dockerfile   # adjust if your filename differs
+      dockerfile: Dockerfile
     environment:
       - ETCD_ENDPOINTS=http://etcd:2379
       - CLUSTER=dev
       - SELF_ID=node1
       - SELF_ADDR=http://node1:8080
     depends_on: [etcd]
-    ports: ["8080:8080"]
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   node2:
     build:
@@ -48,3 +66,6 @@ services:
       - SELF_ADDR=http://node3:8080
     depends_on: [etcd]
     ports: ["8082:8080"]
+
+volumes:
+  etcd-data:
