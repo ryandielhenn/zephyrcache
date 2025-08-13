@@ -8,8 +8,10 @@ import (
 	"os"
 	"strconv"
 	"time"
+	"go.etcd.io/etcd/client/v3"
 
 	"github.com/ryandielhenn/zephyrcache/pkg/kv"
+	"github.com/ryandielhenn/zephyrcache/pkg/ring"
 )
 
 // --- TODOs (bite-size next steps) ---
@@ -23,6 +25,8 @@ import (
 
 type server struct {
 	kv *kv.Store
+	ring *ring.HashRing
+	peers []string
 }
 
 func (s *server) healthz(w http.ResponseWriter, r *http.Request) {
@@ -87,6 +91,15 @@ func (s *server) info(w http.ResponseWriter, r *http.Request) {
 func main() {
 	store := kv.NewStore(64 << 20) // 64MB default cap for MVP
 	s := &server{kv: store}
+	// TODO populate s.peers using etcd client
+	cli, err := clientv3.New(clientv3.Config{
+		Endpoints:   []string{"localhost:2379"},
+		DialTimeout: 5 * time.Second,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer cli.Close()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.healthz)
