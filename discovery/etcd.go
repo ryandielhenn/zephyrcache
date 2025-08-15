@@ -33,6 +33,13 @@ func RegisterNode(cli *clientv3.Client, id, addr string, ttl int64) (clientv3.Le
     return lease.ID, nil
 }
 
-//TODO func GetPeers
+func GetPeers(cli *clientv3.Client) (map[string]string, error) {
+	//TODO func GetPeers
+	peers := make(map[string]string)
+	return peers, nil
+}
 
-//TODO func WatchPeers
+
+func WatchPeers(cli *clientv3.Client, callback func(map[string]string)) {
+	//TODO func WatchPeers
+}
