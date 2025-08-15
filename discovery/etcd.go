@@ -1,4 +1,3 @@
-// TODO etcd-backed discovery
 package discovery
 
 import (
@@ -16,7 +15,6 @@ func NewClient(endpoints []string) (*clientv3.Client, error) {
 	})
 }
 
-//TODO func RegisterNode
 func RegisterNode(cli *clientv3.Client, id, addr string, ttl int64) (clientv3.LeaseID, error) {
 	lease, err := cli.Grant(context.TODO(), ttl)
 	if err != nil {
@@ -34,8 +32,18 @@ func RegisterNode(cli *clientv3.Client, id, addr string, ttl int64) (clientv3.Le
 }
 
 func GetPeers(cli *clientv3.Client) (map[string]string, error) {
-	//TODO func GetPeers
+	resp, err := cli.Get(context.TODO(), "/zephyr/nodes", clientv3.WithPrefix())
+	if err != nil {
+		return nil, err
+	}
+
 	peers := make(map[string]string)
+	for _, kv := range resp.Kvs {
+		id := string(kv.Key[len("zephyr/nodes/"):]) 
+		addr := string(kv.Value)
+		peers[id] = addr
+
+	}
 	return peers, nil
 }
 
