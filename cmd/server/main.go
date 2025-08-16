@@ -112,7 +112,12 @@ func main() {
 	}
 	defer cli.Revoke(context.TODO(), leaseId)
 
-	//TODO watch for peers
+	discovery.WatchPeers(cli, func(peers map[string]string) {
+		//TODO placeholder until I figure out how to respond to watches
+		for id, addr := range(peers) {
+			fmt.Printf("%s -> %s\n", id, addr)
+		}
+	})
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.healthz)
