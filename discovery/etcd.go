@@ -4,8 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"maps"
+	"strings"
+	"sync"
 	"time"
 
+	"go.etcd.io/etcd/api/v3/mvccpb"
 	"go.etcd.io/etcd/client/v3"
 )
 
@@ -32,17 +36,16 @@ func RegisterNode(cli *clientv3.Client, id, addr string, ttl int64) (clientv3.Le
     return lease.ID, nil
 }
 
-func GetPeers(cli *clientv3.Client) (map[string]string, error) {
-	resp, err := cli.Get(context.TODO(), "/zephyr/nodes", clientv3.WithPrefix())
+func GetPeers(cli *clientv3.Client, prefix string) (map[string]string, error) {
+	resp, err := cli.Get(context.TODO(), prefix, clientv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
 
 	peers := make(map[string]string)
 	for _, kv := range resp.Kvs {
-		id := string(kv.Key[len("zephyr/nodes/"):]) 
-		addr := string(kv.Value)
-		peers[id] = addr
+		id := strings.TrimPrefix(string(kv.Key), prefix)
+		peers[id] = string(kv.Value)
 	}
 	return peers, nil
 }
@@ -50,22 +53,38 @@ func GetPeers(cli *clientv3.Client) (map[string]string, error) {
 
 func WatchPeers(cli *clientv3.Client, callback func(map[string]string)) {
 	//TODO func WatchPeers
-	peers, _ := GetPeers(cli)
-	callback(peers)
+	const prefix = "/zephyr/nodes/"
+	peers, _ := GetPeers(cli, prefix)
+	callback(maps.Clone(peers))
+
+	var(
+		mu sync.Mutex
+	)
 
 	go func() {
-		watchChan := cli.Watch(context.TODO(), "/zephyr/nodes/", clientv3.WithPrefix())
+		watchChan := cli.Watch(context.TODO(), prefix, clientv3.WithPrefix())
 		for wresp := range watchChan {
 			//1. 	Check if there was an error with the watch
 			if wresp.Err() != nil {
 				log.Printf("watch error: %v", wresp.Err())
 				continue
 			}
-			//2.	Loop over wresp.Events (each PUT or DELETE).
-			//3.	Update the local peers map to reflect the new cluster membership.
-			//4.	Call your callback (cb) with the updated snapshot so your ring or router knows about the change.
 
-
+			mu.Lock()
+			for _, ev := range wresp.Events {
+				switch ev.Type {
+				case mvccpb.PUT:
+					id := strings.TrimPrefix(string(ev.Kv.Key), prefix)
+					addr := string(ev.Kv.Value)
+					peers[id] = addr
+				case mvccpb.DELETE:
+					id := strings.TrimPrefix(string(ev.Kv.Key), prefix)
+					delete(peers, id)
+				}
+			}
+			snap := maps.Clone(peers)
+			mu.Unlock()
+			callback(snap)
 		}
 	}()
 }
