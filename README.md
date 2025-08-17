@@ -14,11 +14,11 @@
 
 ## Quick start
 ```bash
-# inside the project folder
-make run            # build and run server on :8080
+# inside the deploy folder
+docker compose up # build and run nodes
 curl localhost:8080/healthz
 curl -X PUT localhost:8080/kv/foo -d 'bar'
-curl localhost:8080/kv/foo
+curl localhost:8080/kv/foo #TODO coordinator/proxy If the node is not the owner, it forwards the request to the correct node internally and returns the response.
 ```
 
 ## Roadmap

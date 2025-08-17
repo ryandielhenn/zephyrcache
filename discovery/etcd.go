@@ -45,7 +45,6 @@ func RegisterNode(cli *clientv3.Client, id, addr string, ttl int64) (clientv3.Le
             	log.Printf("keepalive channel closed")
             	return
         	}
-        	log.Printf("got keepalive response: leaseID=%d TTL=%d", resp.ID, resp.TTL)
 		}
 	}()
 
