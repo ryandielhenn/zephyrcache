@@ -109,15 +109,17 @@ func main() {
 	addr := os.Getenv("SELF_ADDR")
 	
 	log.Printf("[Boot] registering, %s : %s with etcd", id, addr)
-	leaseId, err := discovery.RegisterNode(cli, id, addr, 10)
+	leaseId, cancel, err := discovery.RegisterNode(cli, id, addr, 10)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer cli.Revoke(context.TODO(), leaseId)
+	defer func() {
+		cancel()
+		_, _ = cli.Revoke(context.TODO(), leaseId)
+	}()
 
 	log.Printf("[Boot] before watch peers")
 	discovery.WatchPeers(cli, func(peers map[string]string) {
-		//TODO placeholder until I figure out how to respond to watches
 		for id, addr := range(peers) {
 			log.Printf("[WatchPeers Callback] %s -> %s\n", id, addr)
 		}

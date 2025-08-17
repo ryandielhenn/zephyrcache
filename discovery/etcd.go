@@ -20,21 +20,22 @@ func NewClient(endpoints []string) (*clientv3.Client, error) {
 	})
 }
 
-func RegisterNode(cli *clientv3.Client, id, addr string, ttl int64) (clientv3.LeaseID, error) {
+func RegisterNode(cli *clientv3.Client, id, addr string, ttl int64) (clientv3.LeaseID, context.CancelFunc, error) {
 	log.Printf("RegisterNode - granting lease")
-	lease, err := cli.Grant(context.TODO(), ttl)
+	ctx, cancel := context.WithCancel(context.Background())
+	lease, err := cli.Grant(ctx, ttl)
 	if err != nil {
-		return 0, err
+		return 0, cancel, err
 	}
 	key := fmt.Sprintf("/zephyr/nodes/%s", id)
 	log.Printf("RegisterNode - putting key - %s : addr - %s with lease - %d", key, addr, lease.ID)
-    _, err = cli.Put(context.TODO(), key, addr, clientv3.WithLease(lease.ID))
+    _, err = cli.Put(ctx, key, addr, clientv3.WithLease(lease.ID))
     if err != nil {
-        return 0, err
+        return 0, cancel, err
     }
 	
 	log.Printf("Sending keepalive to lease %d", lease.ID)
-	ch, err := cli.KeepAlive(context.TODO(), lease.ID)
+	ch, err := cli.KeepAlive(ctx, lease.ID)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -48,7 +49,7 @@ func RegisterNode(cli *clientv3.Client, id, addr string, ttl int64) (clientv3.Le
 		}
 	}()
 
-    return lease.ID, nil
+    return lease.ID, cancel, nil
 }
 
 func GetPeers(cli *clientv3.Client, prefix string) (map[string]string, error) {
@@ -86,7 +87,6 @@ func WatchPeers(cli *clientv3.Client, callback func(map[string]string)) {
 		watchChan := cli.Watch(context.TODO(), prefix, clientv3.WithPrefix())
 		log.Printf("[WATCH] watch established")
 		for wresp := range watchChan {
-			//1. 	Check if there was an error with the watch
 			if wresp.Err() != nil {
 				log.Printf("watch error: %v", wresp.Err())
 				continue
