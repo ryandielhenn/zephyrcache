@@ -156,14 +156,14 @@ func main() {
 	mux.HandleFunc("/healthz", s.healthz)
 	mux.HandleFunc("/info", s.info)
 	// Need to use ring here to route to correct node
-	mux.HandleFunc("/kv/", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
+	mux.HandleFunc("/kv/", func(w http.ResponseWriter, req *http.Request) {
+		switch req.Method {
 		case http.MethodPut, http.MethodPost:
-			s.put(w, r)
+			s.put(w, req)
 		case http.MethodGet:
-			s.get(w, r)
+			s.get(w, req)
 		case http.MethodDelete:
-			s.del(w, r)
+			s.del(w, req)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
