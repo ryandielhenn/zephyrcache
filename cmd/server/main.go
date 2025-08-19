@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -31,26 +32,46 @@ type server struct {
 	kv *kv.Store
 	ring *ring.HashRing
 	peers []string
+	addr string
 }
 
-func (s *server) healthz(w http.ResponseWriter, r *http.Request) {
+// healthz returns 200 OK to indicate the server is alive.
+func (s *server) healthz(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
 }
 
-func (s *server) put(w http.ResponseWriter, r *http.Request) {
-	key := r.URL.Path[len("/kv/"):]
+// info writes a JSON payload with the process ID, current time, and KV item count.
+func (s *server) info(w http.ResponseWriter, _ *http.Request) {
+	type resp struct {
+		PID   int       `json:"pid"`
+		Now   time.Time `json:"now"`
+		Items int       `json:"items"`
+	}
+	data, _ := json.Marshal(resp{PID: os.Getpid(), Now: time.Now(), Items: s.kv.Len()})
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(data)
+}
 
-	val := make([]byte, r.ContentLength)
-	_, err := r.Body.Read(val)
+// put adds a key/value pair
+func (s *server) put(w http.ResponseWriter, req *http.Request) {
+	key := req.URL.Path[len("/kv/"):]
+	owner := s.ring.Lookup([]byte(key))
+
+	// TODO if this node doesnt own the key forward the request
+	if owner != s.addr {
+		return
+	}
+
+	// handle local case
+	val, err := io.ReadAll(req.Body)
 	if err != nil && err.Error() != "EOF" {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	ttlStr := r.URL.Query().Get("ttl")
 	var ttl time.Duration
-	if ttlStr != "" {
+	if ttlStr := req.URL.Query().Get("ttl"); ttlStr != "" {
 		sec, err := strconv.Atoi(ttlStr)
 		if err != nil {
 			http.Error(w, "invalid ttl", http.StatusBadRequest)
@@ -62,43 +83,51 @@ func (s *server) put(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *server) get(w http.ResponseWriter, r *http.Request) {
-	key := r.URL.Path[len("/kv/"):]
+// get returns the value for a key
+func (s *server) get(w http.ResponseWriter, req *http.Request) {
+	key := req.URL.Path[len("/kv/"):]
+	owner := s.ring.Lookup([]byte(key))
 
+	// TODO if this node doesn't own the key forward the request
+	if owner != s.addr {
+		return
+	}
+
+	// handle local case
 	val, ok := s.kv.Get(key)
 	if !ok {
-		http.NotFound(w, r)
+		http.NotFound(w, req)
 		return
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Write(val)
 }
 
-func (s *server) del(w http.ResponseWriter, r *http.Request) {
-	key := r.URL.Path[len("/kv/"):]
+// del removes a key
+func (s *server) del(w http.ResponseWriter, req *http.Request) {
+	key := req.URL.Path[len("/kv/"):]
+	owner := s.ring.Lookup([]byte(key)) 
 
+	// TODO if this node doesn't own the key forward the request
+	if owner != s.addr {
+		return
+	}
+
+	// handle local case
 	s.kv.Delete(key)
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func (s *server) info(w http.ResponseWriter, r *http.Request) {
-	type resp struct {
-		PID   int       `json:"pid"`
-		Now   time.Time `json:"now"`
-		Items int       `json:"items"`
-	}
-	data, _ := json.Marshal(resp{PID: os.Getpid(), Now: time.Now(), Items: s.kv.Len()})
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(data)
 }
 
 func main() {
 	// 1. Initialize this server with routing ring and key value store
 	store := kv.NewStore(64 << 20) // 64MB default cap for MVP
 	r := ring.New(128, ring.FNV32a)
+	id := os.Getenv("SELF_ID")
+	addr := os.Getenv("SELF_ADDR")
 	s := &server{
 		kv: store,
 		ring: r,
+		addr: addr,
 	}
 	// 2. Create etcd client
 	log.Printf("[Boot] creating etcd client")
@@ -124,11 +153,7 @@ func main() {
 		s.ring.Add(nodeID, addr)
 	}
 
-
 	// 4. Register this node
-	id := os.Getenv("SELF_ID")
-	addr := os.Getenv("SELF_ADDR")
-	
 	log.Printf("[Boot] registering, %s : %s with etcd", id, addr)
 	leaseId, cancel, err := discovery.RegisterNode(cli, id, addr, 10)
 	if err != nil {
@@ -155,7 +180,6 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.healthz)
 	mux.HandleFunc("/info", s.info)
-	// Need to use ring here to route to correct node
 	mux.HandleFunc("/kv/", func(w http.ResponseWriter, req *http.Request) {
 		switch req.Method {
 		case http.MethodPut, http.MethodPost:
