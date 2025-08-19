@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -53,13 +54,78 @@ func (s *server) info(w http.ResponseWriter, _ *http.Request) {
 	w.Write(data)
 }
 
+func normalizeHostPort(addr, defPort string) string {
+	if rest, ok := strings.CutPrefix(addr, "http://"); ok {
+		addr = rest
+	} else if rest, ok := strings.CutPrefix(addr, "https://"); ok {
+		addr = rest
+	}
+
+	if _, _, err := net.SplitHostPort(addr); err == nil {
+		return addr
+	}
+
+	return addr + ":" + defPort
+}
+
+func (s *server) ownerForKey(key string) (ownerHP, selfHP string, ok bool) {
+    ownerID := s.ring.Lookup([]byte(key))        // e.g. "node3"
+    ownerAddr, ok := s.ring.Addr(ownerID)        // e.g. "node3:8080" (what you stored)
+    if !ok || ownerAddr == "" { return "", "", false }
+    return normalizeHostPort(ownerAddr, "8080"), normalizeHostPort(s.addr, "8080"), true
+}
+
+func (s *server) forward(w http.ResponseWriter, req *http.Request, owner string) {
+	if owner == "" { http.Error(w, "no owner for key", http.StatusServiceUnavailable); return }
+
+    hostport := normalizeHostPort(owner, "8080")
+    if normalizeHostPort(s.addr, "8080") == hostport {
+        // last-resort safety; shouldn’t happen if handler compare is correct
+        http.Error(w, "refusing to forward to self", http.StatusInternalServerError)
+        return
+    }
+	target := *req.URL
+	target.Scheme = "http"
+	target.Host = hostport
+
+	out, err := http.NewRequestWithContext(req.Context(), req.Method, target.String(), req.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	out.Header = req.Header.Clone()
+
+	out.Header.Set("X-Forwarded-For", req.RemoteAddr)
+
+	resp, err := http.DefaultClient.Do(out)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	for k, vv := range resp.Header {
+		for _, v := range vv {
+			w.Header().Add(k, v)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
+
+}
+
 // put adds a key/value pair
 func (s *server) put(w http.ResponseWriter, req *http.Request) {
 	key := req.URL.Path[len("/kv/"):]
-	owner := s.ring.Lookup([]byte(key))
+	owner, self, ok := s.ownerForKey(key)
+	if !ok { http.Error(w, "no owner for key", http.StatusServiceUnavailable); return }
 
-	// TODO if this node doesnt own the key forward the request
-	if owner != s.addr {
+
+	// if this node doesnt own the key forward the request
+	if owner != self {
+		log.Printf("[Forward PUT] key=%q owner=%q self=%q", key, owner, self)
+		s.forward(w, req, owner)
 		return
 	}
 
@@ -86,10 +152,13 @@ func (s *server) put(w http.ResponseWriter, req *http.Request) {
 // get returns the value for a key
 func (s *server) get(w http.ResponseWriter, req *http.Request) {
 	key := req.URL.Path[len("/kv/"):]
-	owner := s.ring.Lookup([]byte(key))
+	owner, self, ok := s.ownerForKey(key)
+    if !ok { http.Error(w, "no owner for key", http.StatusServiceUnavailable); return }
 
-	// TODO if this node doesn't own the key forward the request
-	if owner != s.addr {
+	// if this node doesn't own the key forward the request
+	if owner != self {
+		log.Printf("[Forward GET] key=%q owner=%q self=%q", key, owner, self)
+		s.forward(w, req, owner)
 		return
 	}
 
@@ -106,10 +175,13 @@ func (s *server) get(w http.ResponseWriter, req *http.Request) {
 // del removes a key
 func (s *server) del(w http.ResponseWriter, req *http.Request) {
 	key := req.URL.Path[len("/kv/"):]
-	owner := s.ring.Lookup([]byte(key)) 
+	owner, self, ok := s.ownerForKey(key)
+    if !ok { http.Error(w, "no owner for key", http.StatusServiceUnavailable); return }
 
-	// TODO if this node doesn't own the key forward the request
-	if owner != s.addr {
+	// if this node doesn't own the key forward the request
+	if owner != self {
+		log.Printf("[Forward DEL] key=%q owner=%q self=%q", key, owner, self)
+		s.forward(w, req, owner)
 		return
 	}
 
@@ -127,7 +199,7 @@ func main() {
 	s := &server{
 		kv: store,
 		ring: r,
-		addr: addr,
+		addr: normalizeHostPort(addr, "8080"),
 	}
 	// 2. Create etcd client
 	log.Printf("[Boot] creating etcd client")
@@ -148,14 +220,14 @@ func main() {
 	}
 	for _, kv := range resp.Kvs {
 		nodeID := strings.TrimPrefix(string(kv.Key), "/zephyr/nodes/")
-		addr := string(kv.Value)
-		log.Printf("[Bootstrap] %s -> %s", nodeID, addr)
-		s.ring.Add(nodeID, addr)
+		peerHP := normalizeHostPort(string(kv.Value), "8080")
+		log.Printf("[Bootstrap] %s -> %s", nodeID, peerHP)
+		s.ring.Add(nodeID, peerHP)
 	}
 
 	// 4. Register this node
-	log.Printf("[Boot] registering, %s : %s with etcd", id, addr)
-	leaseId, cancel, err := discovery.RegisterNode(cli, id, addr, 10)
+	log.Printf("[Boot] registering, %s : %s with etcd", id, s.addr)
+	leaseId, cancel, err := discovery.RegisterNode(cli, id, s.addr, 10)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -169,8 +241,9 @@ func main() {
 	discovery.WatchPeers(cli, func(peers map[string]string) {
 		s.ring.Clear()
 		for id, addr := range(peers) {
-			log.Printf("[WatchPeers Callback] %s -> %s\n", id, addr)
-			s.ring.Add(id, addr)
+			hp := normalizeHostPort(addr, "8080")
+			log.Printf("[WatchPeers Callback] %s -> %s\n", id, hp)
+			s.ring.Add(id, hp)
 		}
 
 	})
