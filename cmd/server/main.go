@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"go.etcd.io/etcd/client/v3"
@@ -92,13 +93,14 @@ func (s *server) info(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	// 1. Initialize this server with routing ring and key value store
 	store := kv.NewStore(64 << 20) // 64MB default cap for MVP
 	r := ring.New(128, ring.FNV32a)
 	s := &server{
 		kv: store,
 		ring: r,
 	}
-	// TODO populate s.peers using etcd client
+	// 2. Create etcd client
 	log.Printf("[Boot] creating etcd client")
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{"http://etcd:2379"},
@@ -109,6 +111,21 @@ func main() {
 		log.Fatal(err)
 	}
 	defer cli.Close()
+
+	// 3. Bootstrap peers into this ring
+	resp, err := cli.Get(context.TODO(), "/zephyr/nodes", clientv3.WithPrefix())
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, kv := range resp.Kvs {
+		nodeID := strings.TrimPrefix(string(kv.Key), "/zephyr/nodes/")
+		addr := string(kv.Value)
+		log.Printf("[Bootstrap] %s -> %s", nodeID, addr)
+		s.ring.Add(nodeID, addr)
+	}
+
+
+	// 4. Register this node
 	id := os.Getenv("SELF_ID")
 	addr := os.Getenv("SELF_ADDR")
 	
@@ -122,6 +139,7 @@ func main() {
 		_, _ = cli.Revoke(context.TODO(), leaseId)
 	}()
 
+	// 5. Watch for updates about peers
 	log.Printf("[Boot] before watch peers")
 	discovery.WatchPeers(cli, func(peers map[string]string) {
 		s.ring.Clear()
@@ -133,6 +151,7 @@ func main() {
 	})
 	log.Printf("[BOOT] after WatchPeers")
 
+	// 6. Wire up HTTP server endpoints
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.healthz)
 	mux.HandleFunc("/info", s.info)
