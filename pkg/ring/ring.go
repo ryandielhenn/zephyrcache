@@ -20,8 +20,12 @@ type HashRing struct {
 }
 
 func New(replicas int, h Hasher) *HashRing {
-	if replicas <= 0 { replicas = 128 }
-	if h == nil { h = FNV32a }
+	if replicas <= 0 {
+		replicas = 128
+	}
+	if h == nil {
+		h = FNV32a
+	}
 	return &HashRing{
 		replicas: replicas,
 		hash:     h,
@@ -41,7 +45,9 @@ func (r *HashRing) Clear() {
 func (r *HashRing) Add(nodeID, addr string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, ok := r.nodes[nodeID]; ok { return }
+	if _, ok := r.nodes[nodeID]; ok {
+		return
+	}
 	r.nodes[nodeID] = addr
 	// add virtual nodes
 	for i := 0; i < r.replicas; i++ {
@@ -55,7 +61,9 @@ func (r *HashRing) Add(nodeID, addr string) {
 func (r *HashRing) Remove(nodeID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, ok := r.nodes[nodeID]; !ok { return }
+	if _, ok := r.nodes[nodeID]; !ok {
+		return
+	}
 	delete(r.nodes, nodeID)
 	// rebuild points/owners (simplest, MVP)
 	r.points = r.points[:0]
@@ -73,21 +81,29 @@ func (r *HashRing) Remove(nodeID string) {
 func (r *HashRing) Lookup(key []byte) string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	if len(r.points) == 0 { return "" }
+	if len(r.points) == 0 {
+		return ""
+	}
 	h := r.hash(key)
 	// first point >= h, wrap if needed
 	idx := sort.Search(len(r.points), func(i int) bool { return r.points[i] >= h })
-	if idx == len(r.points) { idx = 0 }
+	if idx == len(r.points) {
+		idx = 0
+	}
 	return r.owners[r.points[idx]]
 }
 
 func (r *HashRing) LookupN(key []byte, n int) []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	if len(r.points) == 0 || n <= 0 { return nil }
+	if len(r.points) == 0 || n <= 0 {
+		return nil
+	}
 	h := r.hash(key)
 	idx := sort.Search(len(r.points), func(i int) bool { return r.points[i] >= h })
-	if idx == len(r.points) { idx = 0 }
+	if idx == len(r.points) {
+		idx = 0
+	}
 
 	seen := make(map[string]struct{}, n)
 	out := make([]string, 0, n)
@@ -103,7 +119,8 @@ func (r *HashRing) LookupN(key []byte, n int) []string {
 }
 
 func (r *HashRing) Addr(nodeID string) (string, bool) {
-	r.mu.RLock(); defer r.mu.RUnlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	a, ok := r.nodes[nodeID]
 	return a, ok
 }

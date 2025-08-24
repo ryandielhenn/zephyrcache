@@ -16,24 +16,16 @@ import (
 	"go.etcd.io/etcd/client/v3"
 
 	"github.com/ryandielhenn/zephyrcache/discovery"
+	"github.com/ryandielhenn/zephyrcache/internal/telemetry"
 	"github.com/ryandielhenn/zephyrcache/pkg/kv"
 	"github.com/ryandielhenn/zephyrcache/pkg/ring"
 )
 
-// --- TODOs (bite-size next steps) ---
-// TODO(ryan): wire config: parse nodes, self ID, replicas from env/JSON
-// TODO(ryan): initialize ring, store, router; start HTTP server
-// TODO(ryan): register /debug/pprof and Prometheus metrics
-// TODO(ryan): handlers: PUT/GET/DELETE /v1/cache/{key}?ttl=...
-// TODO(ryan): validate key/ttl/value size; return appropriate status codes
-// TODO(ryan): structured logging: op, key hash, duration, nodeID
-// --- end TODOs ---
-
 type server struct {
-	kv *kv.Store
-	ring *ring.HashRing
+	kv    *kv.Store
+	ring  *ring.HashRing
 	peers []string
-	addr string
+	addr  string
 }
 
 // healthz returns 200 OK to indicate the server is alive.
@@ -72,22 +64,27 @@ func normalizeHostPort(addr, defPort string) string {
 
 // ownerForKey looks up the owner for a key and normalizes the address of the owner
 func (s *server) ownerForKey(key string) (ownerHP, selfHP string, ok bool) {
-    ownerID := s.ring.Lookup([]byte(key))        // e.g. "node3"
-    ownerAddr, ok := s.ring.Addr(ownerID)        // e.g. "node3:8080" (what you stored)
-    if !ok || ownerAddr == "" { return "", "", false }
-    return normalizeHostPort(ownerAddr, "8080"), normalizeHostPort(s.addr, "8080"), true
+	ownerID := s.ring.Lookup([]byte(key)) // e.g. "node3"
+	ownerAddr, ok := s.ring.Addr(ownerID) // e.g. "node3:8080" (what you stored)
+	if !ok || ownerAddr == "" {
+		return "", "", false
+	}
+	return normalizeHostPort(ownerAddr, "8080"), normalizeHostPort(s.addr, "8080"), true
 }
 
 // forward forwards a http request to the node that owns the key
 func (s *server) forward(w http.ResponseWriter, req *http.Request, owner string) {
-	if owner == "" { http.Error(w, "no owner for key", http.StatusServiceUnavailable); return }
+	if owner == "" {
+		http.Error(w, "no owner for key", http.StatusServiceUnavailable)
+		return
+	}
 
-    hostport := normalizeHostPort(owner, "8080")
-    if normalizeHostPort(s.addr, "8080") == hostport {
-        // last-resort safety; shouldn’t happen if handler compare is correct
-        http.Error(w, "refusing to forward to self", http.StatusInternalServerError)
-        return
-    }
+	hostport := normalizeHostPort(owner, "8080")
+	if normalizeHostPort(s.addr, "8080") == hostport {
+		// last-resort safety; shouldn’t happen if handler compare is correct
+		http.Error(w, "refusing to forward to self", http.StatusInternalServerError)
+		return
+	}
 	target := *req.URL
 	target.Scheme = "http"
 	target.Host = hostport
@@ -123,8 +120,10 @@ func (s *server) forward(w http.ResponseWriter, req *http.Request, owner string)
 func (s *server) put(w http.ResponseWriter, req *http.Request) {
 	key := req.URL.Path[len("/kv/"):]
 	owner, self, ok := s.ownerForKey(key)
-	if !ok { http.Error(w, "no owner for key", http.StatusServiceUnavailable); return }
-
+	if !ok {
+		http.Error(w, "no owner for key", http.StatusServiceUnavailable)
+		return
+	}
 
 	if owner != self {
 		log.Printf("[Forward PUT] key=%q owner=%q self=%q", key, owner, self)
@@ -156,7 +155,10 @@ func (s *server) put(w http.ResponseWriter, req *http.Request) {
 func (s *server) get(w http.ResponseWriter, req *http.Request) {
 	key := req.URL.Path[len("/kv/"):]
 	owner, self, ok := s.ownerForKey(key)
-    if !ok { http.Error(w, "no owner for key", http.StatusServiceUnavailable); return }
+	if !ok {
+		http.Error(w, "no owner for key", http.StatusServiceUnavailable)
+		return
+	}
 
 	if owner != self {
 		log.Printf("[Forward GET] key=%q owner=%q self=%q", key, owner, self)
@@ -178,7 +180,10 @@ func (s *server) get(w http.ResponseWriter, req *http.Request) {
 func (s *server) del(w http.ResponseWriter, req *http.Request) {
 	key := req.URL.Path[len("/kv/"):]
 	owner, self, ok := s.ownerForKey(key)
-    if !ok { http.Error(w, "no owner for key", http.StatusServiceUnavailable); return }
+	if !ok {
+		http.Error(w, "no owner for key", http.StatusServiceUnavailable)
+		return
+	}
 
 	if owner != self {
 		log.Printf("[Forward DEL] key=%q owner=%q self=%q", key, owner, self)
@@ -198,7 +203,7 @@ func main() {
 	id := os.Getenv("SELF_ID")
 	addr := os.Getenv("SELF_ADDR")
 	s := &server{
-		kv: store,
+		kv:   store,
 		ring: r,
 		addr: normalizeHostPort(addr, "8080"),
 	}
@@ -241,7 +246,7 @@ func main() {
 	log.Printf("[Boot] before watch peers")
 	discovery.WatchPeers(cli, func(peers map[string]string) {
 		s.ring.Clear()
-		for id, addr := range(peers) {
+		for id, addr := range peers {
 			hp := normalizeHostPort(addr, "8080")
 			log.Printf("[WatchPeers Callback] %s -> %s\n", id, hp)
 			s.ring.Add(id, hp)
@@ -254,22 +259,41 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.healthz)
 	mux.HandleFunc("/info", s.info)
+	mux.Handle("/metrics", telemetry.MetricsHandler())
 	mux.HandleFunc("/kv/", func(w http.ResponseWriter, req *http.Request) {
-		switch req.Method {
-		case http.MethodPut, http.MethodPost:
-			s.put(w, req)
-		case http.MethodGet:
-			s.get(w, req)
-		case http.MethodDelete:
-			s.del(w, req)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
+		op := methodToOp(req.Method) // "get" | "put" | "post" | "delete" | "other"
+		telemetry.Instrument(op, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.Method {
+			case http.MethodPut, http.MethodPost:
+				s.put(w, r)
+			case http.MethodGet:
+				s.get(w, r)
+			case http.MethodDelete:
+				s.del(w, r)
+			default:
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			}
+		})).ServeHTTP(w, req)
 	})
 
 	addr = ":8080"
 	fmt.Println("ZephyrCache server listening on", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatal(err)
+	}
+}
+
+func methodToOp(m string) string {
+	switch m {
+	case http.MethodGet:
+		return "get"
+	case http.MethodPut:
+		return "put"
+	case http.MethodPost:
+		return "post"
+	case http.MethodDelete:
+		return "delete"
+	default:
+		return "other"
 	}
 }

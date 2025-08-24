@@ -158,8 +158,8 @@ func TestLRU_GetUpdatesRecency(t *testing.T) {
 	b := bytes.Repeat([]byte("b"), 40)
 	c := bytes.Repeat([]byte("c"), 40)
 
-	s.Put("a", a, 0)         // ~40
-	s.Put("b", b, 0)         // ~80
+	s.Put("a", a, 0)              // ~40
+	s.Put("b", b, 0)              // ~80
 	if _, ok := s.Get("a"); !ok { // touch a → should be MRU now
 		t.Fatalf("precondition: a missing")
 	}
@@ -180,8 +180,8 @@ func TestOverwrite_SizeAndLen(t *testing.T) {
 	s := NewStore(200)
 
 	orig := bytes.Repeat([]byte("x"), 50)
-	big  := bytes.Repeat([]byte("y"), 90)  // grows
-	small:= bytes.Repeat([]byte("z"), 10)  // shrinks
+	big := bytes.Repeat([]byte("y"), 90)   // grows
+	small := bytes.Repeat([]byte("z"), 10) // shrinks
 
 	s.Put("k", orig, 0)
 	if got, ok := s.Get("k"); !ok || !bytes.Equal(got, orig) {

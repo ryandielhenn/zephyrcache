@@ -15,7 +15,7 @@ import (
 
 func NewClient(endpoints []string) (*clientv3.Client, error) {
 	return clientv3.New(clientv3.Config{
-		Endpoints: endpoints,
+		Endpoints:   endpoints,
 		DialTimeout: 5 * time.Second,
 	})
 }
@@ -29,11 +29,11 @@ func RegisterNode(cli *clientv3.Client, id, addr string, ttl int64) (clientv3.Le
 	}
 	key := fmt.Sprintf("/zephyr/nodes/%s", id)
 	log.Printf("RegisterNode - putting key - %s : addr - %s with lease - %d", key, addr, lease.ID)
-    _, err = cli.Put(ctx, key, addr, clientv3.WithLease(lease.ID))
-    if err != nil {
-        return 0, cancel, err
-    }
-	
+	_, err = cli.Put(ctx, key, addr, clientv3.WithLease(lease.ID))
+	if err != nil {
+		return 0, cancel, err
+	}
+
 	log.Printf("Sending keepalive to lease %d", lease.ID)
 	ch, err := cli.KeepAlive(ctx, lease.ID)
 	if err != nil {
@@ -42,13 +42,13 @@ func RegisterNode(cli *clientv3.Client, id, addr string, ttl int64) (clientv3.Le
 	go func() {
 		for resp := range ch {
 			if resp == nil {
-            	log.Printf("keepalive channel closed")
-            	return
-        	}
+				log.Printf("keepalive channel closed")
+				return
+			}
 		}
 	}()
 
-    return lease.ID, cancel, nil
+	return lease.ID, cancel, nil
 }
 
 func GetPeers(cli *clientv3.Client, prefix string) (map[string]string, error) {
@@ -65,7 +65,6 @@ func GetPeers(cli *clientv3.Client, prefix string) (map[string]string, error) {
 	return peers, nil
 }
 
-
 func WatchPeers(cli *clientv3.Client, callback func(map[string]string)) {
 	const prefix = "/zephyr/nodes/"
 	log.Printf("[WATCH] starting WatchPeers on prefix=%q", prefix)
@@ -73,11 +72,11 @@ func WatchPeers(cli *clientv3.Client, callback func(map[string]string)) {
 	if err != nil {
 		log.Printf("[WATCH] GetPeers failed: %v", err)
 	} else {
-        log.Printf("[WATCH] bootstrap snapshot: %d peers", len(peers))
-    }
+		log.Printf("[WATCH] bootstrap snapshot: %d peers", len(peers))
+	}
 	callback(maps.Clone(peers))
 
-	var(
+	var (
 		mu sync.Mutex
 	)
 
