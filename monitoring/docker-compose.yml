@@ -19,3 +19,7 @@ services:
     depends_on:
       - prometheus
     restart: unless-stopped
+    volumes:
+      - grafana-data:/var/lib/grafana
+volumes:
+  grafana-data:
