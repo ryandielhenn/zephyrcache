@@ -1,4 +1,5 @@
 package gossip
 
-// Placeholder for gossip-based membership and phi accrual failure detector.
-// Week 3 milestone will define message formats, heartbeats, and suspicion logic.
+// Entry point for the gossip subsystem
+// defines the Gossiper struct, config, lifecycle methods (e.g. Start(), Stop() etc)
+// Wires together membership, message handling and transport
