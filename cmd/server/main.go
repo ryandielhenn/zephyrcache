@@ -15,7 +15,7 @@ import (
 
 	"go.etcd.io/etcd/client/v3"
 
-	"github.com/ryandielhenn/zephyrcache/discovery"
+	"github.com/ryandielhenn/zephyrcache/pkg/registry"
 	"github.com/ryandielhenn/zephyrcache/internal/telemetry"
 	"github.com/ryandielhenn/zephyrcache/pkg/kv"
 	"github.com/ryandielhenn/zephyrcache/pkg/ring"
