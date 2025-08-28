@@ -87,17 +87,17 @@ Notes:
 ```text
 CONSISTENT HASH RING (keys map to the first node clockwise from hash(k))
 
-        ┌───────────(t1)───────────┐
-        ▼                           │
+        ┌───────────(t1)────────────┐
+        ▲                           │
      [N1]                         [N2]
         │                           ▼
-        │                           (t2)
-        │                           │
-       (t4)                        [N3]
+        │                        (t2) • p = hash("user:42")
+        │                           │        (between t2 and t3)
+       (t4)                         │
         ▲                           │
-     [N4]                          (t3)
-        │                           ▲
-        └───────────(wrap)──────────┘
+     [N4]                        [N3]  ← Owner("user:42")
+        │                           ▼
+        └────────────(t3)───────────┘   (wrap to t1/N1)
 
 - t1..t4 are token positions on the ring (0..2^m-1).
 - hash(k) = point p on the ring.
