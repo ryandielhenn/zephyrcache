@@ -23,10 +23,20 @@ curl localhost:8080/kv/foo #TODO coordinator/proxy If the node is not the owner,
 ```
 
 ## Roadmap
-- Week 1: Single-node KV with TTL + LRU, HTTP API, metrics.
-- Week 2: Ring + replication factor, quorum reads/writes.
-- Week 3: Gossip membership, hinted handoff, rebalancing hooks.
-- Week 4: Anti-entropy (Merkle), chaos tests, dashboards.
+
+### Done
+- Core KV store with TTL + LRU eviction
+- HTTP API and basic metrics
+
+### In Progress
+- Cluster routing via consistent hash ring and request forwarding
+- Next: replication factor (N), quorum reads/writes (R/W), hinted handoff, read repair
+
+### Not Started
+- Gossip-based membership and failure detection
+- Rebalancing hooks for node joins/leaves
+- Anti-entropy sync (Merkle trees)
+- Chaos testing, dashboards, and alerts
 
 ## etcd Lease & KeepAlive Sequence
 ```text
