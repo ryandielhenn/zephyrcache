@@ -13,7 +13,6 @@ services:
       - --initial-cluster-state=new
       - --logger=zap
       - --log-level=warn
-      # - --auth-token=jwt   # uncomment if/when you enable auth
     ports:
       - "2379:2379"
       - "2380:2380"
@@ -25,47 +24,33 @@ services:
       timeout: 5s
       retries: 3
 
-  node1:
+  node:
     build:
       context: ..
       dockerfile: Dockerfile
     environment:
       - ETCD_ENDPOINTS=http://etcd:2379
       - CLUSTER=dev
-      - SELF_ID=node1
-      - SELF_ADDR=http://node1:8080
-    depends_on: [etcd]
+      # SELF_ID and SELF_ADDR will be set by entrypoint.sh
+    depends_on:
+      etcd:
+        condition: service_healthy
     ports:
-      - "8080:8080"
+      - "8080-8179:8080"  # 100 ports for scaling to 100 nodes
+    # Optional: Add resource limits to prevent one node from consuming everything
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'      # Max 0.5 CPU per node
+          memory: 256M     # Max 256MB per node
+        reservations:
+          cpus: '0.1'
+          memory: 64M
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz >/dev/null 2>&1 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
-
-  node2:
-    build:
-      context: ..
-      dockerfile: Dockerfile
-    environment:
-      - ETCD_ENDPOINTS=http://etcd:2379
-      - CLUSTER=dev
-      - SELF_ID=node2
-      - SELF_ADDR=http://node2:8080
-    depends_on: [etcd]
-    ports: ["8081:8080"]
-
-  node3:
-    build:
-      context: ..
-      dockerfile: Dockerfile
-    environment:
-      - ETCD_ENDPOINTS=http://etcd:2379
-      - CLUSTER=dev
-      - SELF_ID=node3
-      - SELF_ADDR=http://node3:8080
-    depends_on: [etcd]
-    ports: ["8082:8080"]
 
 volumes:
   etcd-data:
