@@ -71,7 +71,7 @@ Example:
 ## Request Forwarding
 ![Request Forwarding](diagrams/request-forwarding/diagram.png)
 
-##Not Started
+## Not Started
 - Replication factor (N), quorum reads/writes (R/W), hinted handoff, read repair
 - Rebalancing hooks for node joins/leaves
 - Anti-entropy sync (Merkle trees)
