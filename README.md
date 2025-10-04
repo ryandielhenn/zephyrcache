@@ -19,7 +19,7 @@ curl localhost:8080/healthz
 curl -X PUT localhost:8080/kv/foo -d 'bar'
 curl localhost:8080/kv/foo
 
-# Scale to more nodes
+# Scale to more cache nodes
 docker-compose -f deploy/docker-compose.yml up -d --scale node=10
 docker-compose -f deploy/docker-compose.yml up -d --scale node=50
 ```
