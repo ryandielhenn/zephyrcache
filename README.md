@@ -16,14 +16,16 @@
 # Run with default configuration (1 cache node, 1 etcd node, default docker network)
 docker-compose -f deploy/docker-compose.yml up -d
 
-# Scale to more nodes
-docker-compose -f deploy/docker-compose.yml up -d --scale node=10
-
 # Test the cluster
 curl localhost:8080/healthz
 curl -X PUT localhost:8080/kv/foo -d 'bar'
 curl localhost:8080/kv/foo
 ```
+
+# Scale to more nodes
+docker-compose -f deploy/docker-compose.yml up -d --scale node=10
+
+
 
 ## Viewing logs
 ```bash
