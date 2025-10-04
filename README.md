@@ -55,27 +55,23 @@ docker-compose -f deploy/docker-compose.yml down
 
 
 ## Request Forwarding
-
-Ideally the client shouldn't have to know where data lives in the cache.
-	•	Client sends request to Node A
-	•	Node A doesn’t own that key
-	•	Node A forwards to Node B (the owner)
-This creates the question: “How does Node A know who owns the key?”
+Clients can send requests to any node in the cluster without needing to know which node owns the data.
 
 ![Request Forwarding](diagrams/request-forwarding/diagram.png)
 
+This raises the question: **"How does a node determine which node owns a given key?"**
+
 ## Consistent Hashing
-The above scenario is acheived using a consistent hashing mechanism:
-- t1..t4 are token positions on the ring (0..2^m-1).
-- hash(k) = point p on the ring.
-- Owner(k) = first node clockwise from p.
-Example:
-  hash("user:42") = position between t2 and t3 → Owner = N3.
+Each node uses consistent hashing to route requests to the correct owner:
 
+**How it works:**
+- The hash ring spans positions from 0 to 2^m-1
+- Each node is assigned one or more token positions (t1, t2, t3, t4) on the ring
+- When a key arrives, hash(k) maps it to a position p on the ring
+- The owner is the first node found traveling clockwise from position p
+
+**Example:**
 ![Consistent Hashing Example](diagrams/consistent_hashing/diagram.png)
-
-
-
 
 ## Not Started
 - Replication factor (N), quorum reads/writes (tunable consistency)
