@@ -47,14 +47,20 @@ docker-compose -f deploy/docker-compose.yml down
 ```
 
 ## etcd Lease Sequence
-Registering all nodes in etcd on startup allows for very important features such as forwarding client requests and health checks.
+Registering all nodes in etcd on startup enables critical features such as request forwarding and health monitoring. **Note: etcd represents a centralized point of failure in the current architecture. Future versions will migrate to a gossip-based protocol for decentralized membership management.**
 
 ![etcd Lease Sequence](diagrams/etcd-lease-sequence/diagram.png)
 
-- Each node attaches all ephemeral membership keys to a single lease (e.g., `leaseID 0x1234`)
-- `KeepAlive` runs as a long-lived gRPC stream; nodes send heartbeat pings every ~TTL/3 to maintain the lease
-- When a lease expires or is revoked, etcd automatically deletes all bound keys and emits watch events to peers watching `/zephyrcache/members/`
+- Each node registers its membership information in etcd under a single lease (e.g., `leaseID 0x1234`)
+- All ephemeral membership keys for that node are attached to this lease, ensuring atomic cleanup on failure
+- `KeepAlive` operates as a long-lived bidirectional gRPC stream implemented in the etcd client; nodes send heartbeat pings approximately every TTL/3 to maintain the lease
+- When a lease expires (no heartbeat received within TTL) or is explicitly revoked, etcd automatically deletes all bound keys and emits watch events to all peers monitoring `/zephyr/nodes`
+- Peer nodes receive these watch events and update their local membership view accordingly
 
+### Known Limitations
+- **Single Point of Failure**: etcd cluster outages prevent new nodes from joining and may cause cascading failures
+- **Network Sensitivity**: Transient network issues can trigger false-positive failure detections
+- **Scalability**: Watch event fanout becomes expensive with large clusters (>100 nodes)
 
 ## Request Forwarding
 Clients can send requests to any node in the cluster without needing to know which node owns the data.
