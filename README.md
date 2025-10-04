@@ -72,10 +72,9 @@ Example:
 ![Request Forwarding](diagrams/request-forwarding/diagram.png)
 
 ## Not Started
-- Replication factor (N), quorum reads/writes (R/W), hinted handoff, read repair
+- Replication factor (N), quorum reads/writes (tunable consistency)
 - Rebalancing hooks for node joins/leaves
 - Anti-entropy sync (Merkle trees)
 - Chaos testing, improved dashboards, and alerts
-- phi accrual failure detector
-- Tunable consistency (R/W quorums), replication factor
+- Phi accrual failure detector
 - Hinted handoff, read-repair, anti-entropy (Merkle)
