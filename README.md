@@ -16,7 +16,7 @@
 # Run with default configuration (1 cache node, 1 etcd node, default docker network)
 docker-compose -f deploy/docker-compose.yml up -d
 
-# Or scale to more nodes
+# Scale to more nodes
 docker-compose -f deploy/docker-compose.yml up -d --scale node=10
 
 # Test the cluster
