@@ -9,8 +9,6 @@
 - Gossip-based membership and failure detection (skeleton not working yet defaulting to etcd)
 - Prometheus metrics, Grafana dashboards
 
-
-
 ## Quick start
 ```bash
 # Run with default configuration (1 cache node, 1 etcd node, default docker network)
@@ -60,7 +58,8 @@ Notes:
 ## Consistent Hash Ring
 ![Consistent Hashing Example](diagrams/consistent_hashing/diagram.png)
 
-```text
+```markdown
+Notes:
 - t1..t4 are token positions on the ring (0..2^m-1).
 - hash(k) = point p on the ring.
 - Owner(k) = first node clockwise from p.
