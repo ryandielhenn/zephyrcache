@@ -6,7 +6,7 @@
 - HTTP API and basic metrics
 - etcd-backed membership via leases (ephemeral keys, watch-based join/leave)
 - Cluster routing via consistent hash ring and request forwarding
-- Gossip-based membership and failure detection (skeleton not working yet)
+- Gossip-based membership and failure detection (skeleton not working yet defaulting to etcd)
 - Prometheus metrics, Grafana dashboards
 
 
