@@ -14,8 +14,8 @@ type HashRing struct {
 	mu       sync.RWMutex
 	replicas int
 	hash     Hasher
-	points   []uint32          // sorted
-	owners   map[uint32]string // point -> nodeID
+	tokens   []uint32          // tokens give each node many placements on the ring and sorted token list defines ring order
+	owners   map[uint32]string // token -> nodeID
 	nodes    map[string]string // nodeID -> addr (metadata)
 }
 
@@ -37,7 +37,7 @@ func New(replicas int, h Hasher) *HashRing {
 func (r *HashRing) Clear() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.points = r.points[:0]
+	r.tokens = r.tokens[:0]
 	r.owners = make(map[uint32]string)
 	r.nodes = make(map[string]string)
 }
@@ -51,11 +51,11 @@ func (r *HashRing) Add(nodeID, addr string) {
 	r.nodes[nodeID] = addr
 	// add virtual nodes
 	for i := 0; i < r.replicas; i++ {
-		pt := r.hash(pointKey(nodeID, i))
+		pt := r.hash(tokenKey(nodeID, i))
 		r.owners[pt] = nodeID
-		r.points = append(r.points, pt)
+		r.tokens = append(r.tokens, pt)
 	}
-	slices.Sort(r.points)
+	slices.Sort(r.tokens)
 }
 
 func (r *HashRing) Remove(nodeID string) {
@@ -65,53 +65,53 @@ func (r *HashRing) Remove(nodeID string) {
 		return
 	}
 	delete(r.nodes, nodeID)
-	// rebuild points/owners (simplest, MVP)
-	r.points = r.points[:0]
+	// rebuild tokens/owners (simplest, MVP)
+	r.tokens = r.tokens[:0]
 	clear(r.owners)
 	for id := range r.nodes {
 		for i := 0; i < r.replicas; i++ {
-			pt := r.hash(pointKey(id, i))
-			r.owners[pt] = id
-			r.points = append(r.points, pt)
+			tok := r.hash(tokenKey(id, i))
+			r.owners[tok] = id
+			r.tokens = append(r.tokens, tok)
 		}
 	}
-	slices.Sort(r.points)
+	slices.Sort(r.tokens)
 }
 
 func (r *HashRing) Lookup(key []byte) string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	if len(r.points) == 0 {
+	if len(r.tokens) == 0 {
 		return ""
 	}
 	h := r.hash(key)
-	// first point >= h, wrap if needed
-	idx := sort.Search(len(r.points), func(i int) bool { return r.points[i] >= h })
-	if idx == len(r.points) {
+	// first token >= h, wrap if needed
+	idx := sort.Search(len(r.tokens), func(i int) bool { return r.tokens[i] >= h })
+	if idx == len(r.tokens) {
 		idx = 0
 	}
-	return r.owners[r.points[idx]]
+	return r.owners[r.tokens[idx]]
 }
 
 func (r *HashRing) LookupN(key []byte, n int) []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	if len(r.points) == 0 || n <= 0 {
+	if len(r.tokens) == 0 || n <= 0 {
 		return nil
 	}
 	h := r.hash(key)
-	idx := sort.Search(len(r.points), func(i int) bool { return r.points[i] >= h })
-	if idx == len(r.points) {
+	idx := sort.Search(len(r.tokens), func(i int) bool { return r.tokens[i] >= h })
+	if idx == len(r.tokens) {
 		idx = 0
 	}
 
-	seen := make(map[string]struct{}, n)
+	seen := make(map[string]bool, n)
 	out := make([]string, 0, n)
-	for i := 0; i < len(r.points) && len(out) < n; i++ {
-		p := r.points[(idx+i)%len(r.points)]
+	for i := 0; i < len(r.tokens) && len(out) < n; i++ {
+		p := r.tokens[(idx+i)%len(r.tokens)]
 		id := r.owners[p]
-		if _, ok := seen[id]; !ok {
-			seen[id] = struct{}{}
+		if !seen[id] {
+			seen[id] = true
 			out = append(out, id)
 		}
 	}
@@ -131,7 +131,7 @@ func FNV32a(b []byte) uint32 {
 	return h.Sum32()
 }
 
-func pointKey(nodeID string, i int) []byte {
+func tokenKey(nodeID string, i int) []byte {
 	var buf [4]byte
 	binary.LittleEndian.PutUint32(buf[:], uint32(i))
 	return append([]byte(nodeID), buf[:]...)

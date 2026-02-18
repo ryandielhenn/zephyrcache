@@ -6,9 +6,9 @@
 //
 // Typical usage:
 //
-//   g, _ := gossip.New(gossip.Config{NodeID: "node1"})
-//   g.Start()
-//   defer g.Stop()
+//	g, _ := gossip.New(gossip.Config{NodeID: "node1"})
+//	g.Start()
+//	defer g.Stop()
 //
 // By default it can run with an in-process channel transport (for testing),
 // but production deployments should swap in a UDP transport.

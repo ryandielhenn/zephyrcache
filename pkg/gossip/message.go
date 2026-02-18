@@ -6,32 +6,34 @@ package gossip
 type NodeID string
 
 type State uint8
+
 const (
-    StateAlive State = iota
-    StateSuspect
-    StateDead
+	StateAlive State = iota
+	StateSuspect
+	StateDead
 )
 
 type MsgType uint8
+
 const (
-    MsgPing MsgType = iota
-    MsgAck
-    MsgIndirectPing
-    MsgPushPullReq
-    MsgPushPullResp
+	MsgPing MsgType = iota
+	MsgAck
+	MsgIndirectPing
+	MsgPushPullReq
+	MsgPushPullResp
 )
 
 type Delta struct {
-    Member Member
-    // Optional: tombstone deadline for StateDead to garbage-collect
+	Member Member
+	// Optional: tombstone deadline for StateDead to garbage-collect
 }
 
 type GossipMsg struct {
-    Type       MsgType
-    From       NodeID
-    Target     *NodeID          // for indirect pings
-    Deltas     []Delta          // piggyback
-    Nonce      uint64           // match ping/ack
-    SchemaV    uint16           // forward-compat
-    // Optional: HMAC/nonce for auth later
+	Type    MsgType
+	From    NodeID
+	Target  *NodeID // for indirect pings
+	Deltas  []Delta // piggyback
+	Nonce   uint64  // match ping/ack
+	SchemaV uint16  // forward-compat
+	// Optional: HMAC/nonce for auth later
 }

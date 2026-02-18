@@ -7,7 +7,7 @@ import "context"
 // Helps you swap out transport without touching membership logic
 
 type Transport interface {
-    Send(addr string, msg GossipMsg) error
-    Recv(ctx context.Context) (GossipMsg, net.Addr, error)
-    Close() error
+	Send(addr string, msg GossipMsg) error
+	Recv(ctx context.Context) (GossipMsg, net.Addr, error)
+	Close() error
 }

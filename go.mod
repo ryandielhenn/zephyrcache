@@ -8,6 +8,7 @@ require (
 	github.com/prometheus/client_golang v1.19.0
 	go.etcd.io/etcd/api/v3 v3.6.4
 	go.etcd.io/etcd/client/v3 v3.6.0-alpha.0
+	go.uber.org/zap v1.27.0
 )
 
 require (
@@ -23,7 +24,6 @@ require (
 	github.com/prometheus/procfs v0.12.0 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.6.4 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/net v0.38.0 // indirect
 	golang.org/x/sys v0.31.0 // indirect
 	golang.org/x/text v0.23.0 // indirect
