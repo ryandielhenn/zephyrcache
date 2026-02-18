@@ -1,6 +1,9 @@
 package gossip
 
-import "context"
+import (
+	"context"
+	"net"
+)
 
 // Interface for sending/receiving gossip messages (e.g. over UDP, TCP, or even in-proc channel for testing)
 // Concrete implementations: UDPTransport, ChannelTransport
