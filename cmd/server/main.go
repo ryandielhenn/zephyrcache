@@ -32,7 +32,7 @@ func main() {
 			rf = n
 		}
 	}
-	n := node.NewNodeRF(store, r, id, rf)
+	n := node.NewNodeRF(store, r, node.NormalizeHostPort(addr, "8080"), rf)
 	// 2. Create etcd client
 	log.Printf("[Boot] creating etcd client")
 	cli, err := clientv3.New(clientv3.Config{
