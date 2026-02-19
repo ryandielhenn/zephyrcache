@@ -1,10 +1,9 @@
 package gossip
 
 import (
+	"go.uber.org/zap"
 	"math/rand"
 	"time"
-
-	"go.uber.org/zap"
 )
 
 // Entry point for the gossip subsystem
