@@ -71,13 +71,13 @@ func main() {
 	// 5. Watch for updates about peers
 	log.Printf("[Boot] before watch peers")
 	discovery.WatchPeers(cli, func(peers map[string]string) {
-		n.ClearPeers()
+		// Normalize peer addresses
+		normalizedPeers := make(map[string]string, len(peers))
 		for id, addr := range peers {
-			hp := node.NormalizeHostPort(addr, "8080")
-			log.Printf("[WatchPeers Callback] %s -> %s\n", id, hp)
-			n.AddPeer(id, hp)
+			normalizedPeers[id] = node.NormalizeHostPort(addr, "8080")
 		}
-
+		n.SyncPeers(normalizedPeers)
+		log.Printf("[WatchPeers Callback] synced %d peers\n", len(peers))
 	})
 	log.Printf("[BOOT] after WatchPeers")
 
