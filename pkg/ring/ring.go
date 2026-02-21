@@ -3,6 +3,7 @@ package ring
 import (
 	"encoding/binary"
 	"hash/fnv"
+	"maps"
 	"slices"
 	"sort"
 	"sync"
@@ -68,20 +69,20 @@ func (r *HashRing) Remove(nodeID string) {
 	}
 	delete(r.nodes, nodeID)
 
-	// Remove only this node's tokens (O(replicas) instead of O(nodes * replicas))
-	newTokens := make([]uint32, 0, len(r.tokens)-r.replicas)
-	for _, tok := range r.tokens {
-		if owner, ok := r.owners[tok]; !ok || owner != nodeID {
-			newTokens = append(newTokens, tok)
-		}
-	}
-	r.tokens = newTokens
-
-	// Clean up owners map for this node's tokens
+	// Clean up owners map for this node's tokens first
 	for i := 0; i < r.replicas; i++ {
 		tok := r.hash(tokenKey(nodeID, i))
 		delete(r.owners, tok)
 	}
+
+	// Remove only this node's tokens (O(replicas) instead of O(nodes * replicas))
+	newTokens := make([]uint32, 0, len(r.tokens)-r.replicas)
+	for _, tok := range r.tokens {
+		if _, ok := r.owners[tok]; ok {
+			newTokens = append(newTokens, tok)
+		}
+	}
+	r.tokens = newTokens
 }
 
 func (r *HashRing) Lookup(key []byte) string {
@@ -129,9 +130,7 @@ func (r *HashRing) Nodes() map[string]string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	nodes := make(map[string]string, len(r.nodes))
-	for id, addr := range r.nodes {
-		nodes[id] = addr
-	}
+	maps.Copy(nodes, r.nodes)
 	return nodes
 }
 

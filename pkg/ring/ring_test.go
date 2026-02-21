@@ -99,6 +99,32 @@ func TestIdempotentRemove(t *testing.T) {
 	r.Remove("n1")
 }
 
+func TestRemoveNonExistentNode(t *testing.T) {
+	r := New(128, fnv32a)
+	r.Add("n1", "a:1")
+	r.Add("n2", "a:2")
+
+	// Record state before removing non-existent node
+	beforeCount := len(r.Nodes())
+
+	// Remove a node that doesn't exist
+	r.Remove("non-existent")
+
+	// Verify nothing changed
+	afterCount := len(r.Nodes())
+	if beforeCount != afterCount {
+		t.Fatalf("removing non-existent node changed node count: before=%d, after=%d", beforeCount, afterCount)
+	}
+
+	// Verify original nodes are still there
+	if _, ok := r.Addr("n1"); !ok {
+		t.Fatal("n1 should still exist")
+	}
+	if _, ok := r.Addr("n2"); !ok {
+		t.Fatal("n2 should still exist")
+	}
+}
+
 func TestNodes(t *testing.T) {
 	r := New(128, fnv32a)
 	r.Add("n1", "a:1")
