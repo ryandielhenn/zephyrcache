@@ -26,7 +26,7 @@ We welcome contributions in many forms:
 Fork the repository to your own GitHub account, then clone it to your local machine:
 
 ```bash
-git clone https://github.com/<your-username>/zephyrcache.git
+git clone git@github.com:<your-username>/zephyrcache.git
 cd zephyrcache
 ```
 
