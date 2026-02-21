@@ -98,3 +98,88 @@ func TestIdempotentRemove(t *testing.T) {
 	// Removing again should not panic
 	r.Remove("n1")
 }
+
+func TestRemoveNonExistentNode(t *testing.T) {
+	r := New(128, fnv32a)
+	r.Add("n1", "a:1")
+	r.Add("n2", "a:2")
+
+	// Record state before removing non-existent node
+	beforeCount := len(r.Nodes())
+
+	// Remove a node that doesn't exist
+	r.Remove("non-existent")
+
+	// Verify nothing changed
+	afterCount := len(r.Nodes())
+	if beforeCount != afterCount {
+		t.Fatalf("removing non-existent node changed node count: before=%d, after=%d", beforeCount, afterCount)
+	}
+
+	// Verify original nodes are still there
+	if _, ok := r.Addr("n1"); !ok {
+		t.Fatal("n1 should still exist")
+	}
+	if _, ok := r.Addr("n2"); !ok {
+		t.Fatal("n2 should still exist")
+	}
+}
+
+func TestNodes(t *testing.T) {
+	r := New(128, fnv32a)
+	r.Add("n1", "a:1")
+	r.Add("n2", "a:2")
+
+	nodes := r.Nodes()
+	if len(nodes) != 2 {
+		t.Fatalf("expected 2 nodes, got %d", len(nodes))
+	}
+	if nodes["n1"] != "a:1" || nodes["n2"] != "a:2" {
+		t.Fatalf("Nodes() returned incorrect data: %v", nodes)
+	}
+
+	// Verify it's a copy (modifying doesn't affect original)
+	nodes["n3"] = "a:3"
+	if _, ok := r.Nodes()["n3"]; ok {
+		t.Fatal("Nodes() returned a reference, not a copy")
+	}
+}
+
+func TestRemoveOnlyAffectsTargetNode(t *testing.T) {
+	r := New(128, fnv32a)
+	r.Add("n1", "a:1")
+	r.Add("n2", "a:2")
+	r.Add("n3", "a:3")
+
+	// Record lookups before removal
+	keys := [][]byte{[]byte("key1"), []byte("key2"), []byte("key3")}
+	before := make(map[string]string)
+	for _, k := range keys {
+		before[string(k)] = r.Lookup(k)
+	}
+
+	// Remove n2
+	r.Remove("n2")
+
+	// Verify n2 is gone
+	if _, ok := r.Addr("n2"); ok {
+		t.Fatal("n2 should have been removed")
+	}
+
+	// Verify n1 and n3 are still present
+	if _, ok := r.Addr("n1"); !ok {
+		t.Fatal("n1 should still exist")
+	}
+	if _, ok := r.Addr("n3"); !ok {
+		t.Fatal("n3 should still exist")
+	}
+
+	// Verify lookups for keys that were on n1 or n3 haven't changed
+	for _, k := range keys {
+		after := r.Lookup(k)
+		beforeNode := before[string(k)]
+		if beforeNode != "n2" && after != beforeNode {
+			t.Fatalf("key %q moved from %s to %s, should stay on %s", k, beforeNode, after, beforeNode)
+		}
+	}
+}
