@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"maps"
 	"strings"
 	"sync"
@@ -21,20 +22,20 @@ func NewClient(endpoints []string) (*clientv3.Client, error) {
 }
 
 func RegisterNode(cli *clientv3.Client, id, addr string, ttl int64) (clientv3.LeaseID, context.CancelFunc, error) {
-	log.Printf("RegisterNode - granting lease")
+	slog.Info("RegisterNode - granting lease")
 	ctx, cancel := context.WithCancel(context.Background())
 	lease, err := cli.Grant(ctx, ttl)
 	if err != nil {
 		return 0, cancel, err
 	}
 	key := fmt.Sprintf("/zephyr/nodes/%s", id)
-	log.Printf("RegisterNode - putting key - %s : addr - %s with lease - %d", key, addr, lease.ID)
+	slog.Info("RegisterNode - putting", "key", key, "addr", addr, "lease", lease.ID)
 	_, err = cli.Put(ctx, key, addr, clientv3.WithLease(lease.ID))
 	if err != nil {
 		return 0, cancel, err
 	}
 
-	log.Printf("Sending keepalive to lease %d", lease.ID)
+	slog.Info("Sending keepalive to", "lease", lease.ID)
 	ch, err := cli.KeepAlive(ctx, lease.ID)
 	if err != nil {
 		log.Fatal(err)
@@ -42,7 +43,7 @@ func RegisterNode(cli *clientv3.Client, id, addr string, ttl int64) (clientv3.Le
 	go func() {
 		for resp := range ch {
 			if resp == nil {
-				log.Printf("keepalive channel closed")
+				slog.Info("keepalive channel closed")
 				return
 			}
 		}
@@ -67,12 +68,12 @@ func GetPeers(cli *clientv3.Client, prefix string) (map[string]string, error) {
 
 func WatchPeers(cli *clientv3.Client, callback func(map[string]string)) {
 	const prefix = "/zephyr/nodes/"
-	log.Printf("[WATCH] starting WatchPeers on prefix=%q", prefix)
+	slog.Info("[WATCH] starting WatchPeers on", "prefix", prefix)
 	peers, err := GetPeers(cli, prefix)
 	if err != nil {
-		log.Printf("[WATCH] GetPeers failed: %v", err)
+		slog.Error("[WATCH] GetPeers failed", "error", err.Error())
 	} else {
-		log.Printf("[WATCH] bootstrap snapshot: %d peers", len(peers))
+		slog.Info("[WATCH] bootstrap snapshot", "peers", len(peers))
 	}
 	callback(maps.Clone(peers))
 
@@ -81,12 +82,12 @@ func WatchPeers(cli *clientv3.Client, callback func(map[string]string)) {
 	)
 
 	go func() {
-		log.Printf("[WATCH] establishing watch on %q", prefix)
+		slog.Info("[WATCH] establishing watch on", "etcd prefix", prefix)
 		watchChan := cli.Watch(context.TODO(), prefix, clientv3.WithPrefix())
-		log.Printf("[WATCH] watch established")
+		slog.Info("[WATCH] watch established")
 		for wresp := range watchChan {
 			if wresp.Err() != nil {
-				log.Printf("watch error: %v", wresp.Err())
+				slog.Error("watch error: ", "error", wresp.Err().Error())
 				continue
 			}
 

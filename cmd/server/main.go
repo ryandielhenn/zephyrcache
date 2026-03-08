@@ -1,8 +1,8 @@
 package main
 
 import (
-	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -24,6 +24,13 @@ func main() {
 	seedAddr := os.Getenv("SEED_ADDR")
 	etcdEndpoints := os.Getenv("ETCD_ENDPOINTS")
 	membershipService := os.Getenv("DISCOVERY")
+	var level slog.Level
+	if lvl := os.Getenv("LOG_LEVEL"); lvl != "" {
+		level.UnmarshalText([]byte(lvl))
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: level,
+	})))
 
 	// 2. Connect to cluster
 	r.Add(id, addr)
@@ -31,12 +38,12 @@ func main() {
 	switch membershipService {
 	case "etcd":
 		// Create etcd client
-		log.Printf("[Boot] creating etcd client")
+		slog.Info("[Boot] creating etcd client")
 		cli, err := clientv3.New(clientv3.Config{
 			Endpoints:   strings.Split(etcdEndpoints, ","),
 			DialTimeout: 5 * time.Second,
 		})
-		log.Printf("[Boot] created etcd client with endpoints, %s", cli.Endpoints())
+		slog.Info("[Boot] created etcd client with", "endpoints", cli.Endpoints())
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -50,7 +57,7 @@ func main() {
 		}
 		go node.StartGossipPinger(n)
 	default:
-		log.Printf("DISCOVERY must be set.")
+		slog.Info("DISCOVERY must be set.")
 		return
 	}
 
@@ -62,7 +69,7 @@ func main() {
 	mux.HandleFunc("/kv/", func(w http.ResponseWriter, req *http.Request) {
 		op := methodToOp(req.Method) // "get" | "put" | "post" | "delete" | "other"
 		telemetry.Instrument(op, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			log.Println("Received HTTP Request")
+			slog.Info("Received HTTP Request")
 			switch r.Method {
 			case http.MethodPut, http.MethodPost:
 				n.Put(w, r)
@@ -77,9 +84,9 @@ func main() {
 	})
 
 	addr = ":8080"
-	fmt.Println("ZephyrCache node listening on", addr)
+	slog.Info("ZephyrCache node listening on", "addr", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
-		log.Fatal(err)
+		log.Fatal(err.Error())
 	}
 }
 

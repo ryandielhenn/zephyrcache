@@ -6,7 +6,7 @@ services:
       dockerfile: Dockerfile
     environment:
       - DISCOVERY=gossip
-      - CLUSTER=dev
+      - LOG_LEVEL=warn
     ports:
       - "8080:8080"
       - "4000:4000"
