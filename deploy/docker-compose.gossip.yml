@@ -6,10 +6,9 @@ services:
       dockerfile: Dockerfile
     environment:
       - DISCOVERY=gossip
-      - CLUSTER=dev
+      - GOSSIP_PORT=4000
     ports:
       - "8080:8080"
-      - "4000:4000"
     deploy:
       resources:
         limits:
@@ -28,6 +27,7 @@ services:
     environment:
       - DISCOVERY=gossip
       - SEED_ADDR=seed:4000
+      - GOSSIP_PORT=4000
     depends_on:
       seed:
         condition: service_healthy

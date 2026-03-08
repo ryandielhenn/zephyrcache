@@ -24,10 +24,11 @@ func main() {
 	seedAddr := os.Getenv("SEED_ADDR")
 	etcdEndpoints := os.Getenv("ETCD_ENDPOINTS")
 	membershipService := os.Getenv("DISCOVERY")
+	gossipPort := os.Getenv("GOSSIP_PORT")
 
 	// 2. Connect to cluster
 	r.Add(id, addr)
-	n := node.NewNode(store, r, id, node.NormalizeHostPort(addr, "8080"))
+	n := node.NewNode(store, r, id, node.NormalizeHostPort(addr, "8080"), gossipPort)
 	switch membershipService {
 	case "etcd":
 		// Create etcd client
@@ -44,7 +45,7 @@ func main() {
 		defer node.BootstrapPeers(n, cli)()
 		node.WatchPeers(n, cli)
 	case "gossip":
-		go node.StartGossipListener("4000", n)
+		go node.StartGossipListener(n)
 		if seedAddr != "" {
 			n.ConnectToCluster(seedAddr)
 		}

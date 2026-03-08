@@ -22,9 +22,10 @@ type Node struct {
 	addr        string
 	incarnation int
 	timeout     *time.Timer
+	gossipPort  string
 }
 
-func NewNode(store *kv.Store, r *ring.HashRing, id string, addr string) *Node {
+func NewNode(store *kv.Store, r *ring.HashRing, id string, addr string, gossipPort string) *Node {
 	return &Node{
 		kv:          store,
 		ring:        r,
@@ -34,6 +35,7 @@ func NewNode(store *kv.Store, r *ring.HashRing, id string, addr string) *Node {
 		id:          id,
 		addr:        addr,
 		incarnation: 0,
+		gossipPort:  gossipPort,
 	}
 }
 

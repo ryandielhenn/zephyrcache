@@ -159,7 +159,7 @@ func (n *Node) sendGossip(msg *gossip.Message, addr string) {
 		return
 	}
 
-	udpAddr, err := net.ResolveUDPAddr("udp", OverrideHostPort(addr, "4000"))
+	udpAddr, err := net.ResolveUDPAddr("udp", OverrideHostPort(addr, n.gossipPort))
 	if err != nil {
 		return
 	}
@@ -195,8 +195,8 @@ func (n *Node) ConnectToCluster(addr string) {
 	n.sendGossip(message, addr)
 }
 
-func StartGossipListener(port string, node *Node) {
-	address := net.JoinHostPort("", port)
+func StartGossipListener(node *Node) {
+	address := net.JoinHostPort("", node.gossipPort)
 
 	addr, err := net.ResolveUDPAddr("udp", address)
 	if err != nil {
