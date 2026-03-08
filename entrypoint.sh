@@ -17,6 +17,7 @@ fi
 echo "Starting node with:"
 echo "  SELF_ID=$SELF_ID"
 echo "  SELF_ADDR=$SELF_ADDR"
+echo "  GOSSIP_PORT=${GOSSIP_PORT:-4000}"
 
 # Execute the main application
 exec "$@"

@@ -3,7 +3,7 @@ package node
 import (
 	"encoding/json"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
@@ -82,7 +82,7 @@ func (n *Node) Put(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if owner != self {
-		log.Printf("[Forward PUT] key=%q owner=%q self=%q", key, owner, self)
+		slog.Info("[Forward PUT]", "key", key, "owner", owner, "self", self)
 		n.Forward(w, req, owner)
 		return
 	}
@@ -117,7 +117,7 @@ func (n *Node) Get(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if owner != self {
-		log.Printf("[Forward GET] key=%q owner=%q self=%q", key, owner, self)
+		slog.Info("[Forward GET]", "key", key, "owner", owner, "self", self)
 		n.Forward(w, req, owner)
 		return
 	}
@@ -142,7 +142,7 @@ func (n *Node) Del(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if owner != self {
-		log.Printf("[Forward DEL] key=%q owner=%q self=%q", key, owner, self)
+		slog.Info("[Forward DEL]", "key", key, "owner", owner, "self", self)
 		n.Forward(w, req, owner)
 		return
 	}

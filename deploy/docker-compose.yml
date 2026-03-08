@@ -5,7 +5,7 @@ services:
       context: ..
       dockerfile: Dockerfile
     environment:
-      - CLUSTER=dev
+      - LOG_LEVEL=warn
     ports:
       - "8080-8179:8080"
     deploy:

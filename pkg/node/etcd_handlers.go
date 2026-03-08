@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"log"
+	"log/slog"
 	"strings"
 
 	discovery "github.com/ryandielhenn/zephyrcache/pkg/registry"
@@ -18,11 +19,11 @@ func BootstrapPeers(node *Node, cli *clientv3.Client) func() {
 	for _, kv := range resp.Kvs {
 		nodeID := strings.TrimPrefix(string(kv.Key), "/zephyr/nodes/")
 		peerHP := NormalizeHostPort(string(kv.Value), "8080")
-		log.Printf("[Bootstrap] %s -> %s", nodeID, peerHP)
+		slog.Info("[Bootstrap]", "node", nodeID, "peer", peerHP)
 		node.addPeer(nodeID, peerHP)
 	}
 
-	log.Printf("[Boot] registering, %s : %s with etcd", node.id, node.addr)
+	slog.Info("[Boot] registering, with etcd", "node.id", node.id, "node.addr", node.addr)
 	leaseId, cancel, err := discovery.RegisterNode(cli, node.id, node.addr, 10)
 	if err != nil {
 		log.Fatal(err)
@@ -38,14 +39,14 @@ func BootstrapPeers(node *Node, cli *clientv3.Client) func() {
 
 func WatchPeers(node *Node, cli *clientv3.Client) {
 	// Watch for updates about peers
-	log.Printf("[Boot] before watch peers")
+	slog.Info("[Boot] before watch peers")
 	discovery.WatchPeers(cli, func(peers map[string]string) {
 		normalizedPeers := make(map[string]string, len(peers))
 		for id, addr := range peers {
 			normalizedPeers[id] = NormalizeHostPort(addr, "8080")
 		}
 		node.syncPeers(normalizedPeers)
-		log.Printf("[WatchPeers Callback] synced %d peers\n", len(peers))
+		slog.Info("[WatchPeers Callback] synced %d peers\n", len(peers))
 	})
-	log.Printf("[BOOT] after WatchPeers")
+	slog.Info("[BOOT] after WatchPeers")
 }

@@ -1,7 +1,7 @@
 package node
 
 import (
-	"log"
+	"log/slog"
 	"math"
 	"math/rand"
 	"time"
@@ -72,7 +72,7 @@ func (n *Node) setPeer(id string, peerBody peer.Peer) {
 	}
 	n.peers[id] = peerBody
 	peerIds := n.getPeerList()
-	log.Printf("%+v", peerIds)
+	slog.Info("Peers", "peer ids", peerIds)
 }
 
 func (n *Node) addPeer(id string, peerHP string) {

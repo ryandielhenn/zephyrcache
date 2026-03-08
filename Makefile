@@ -13,6 +13,7 @@ DISCOVERY ?= gossip
 NODES     ?= 3
 PROJECT   := zephyr
 COMPOSE   := docker compose -p $(PROJECT) -f deploy/docker-compose.yml -f deploy/docker-compose.$(DISCOVERY).yml
+ALL := docker compose -p $(PROJECT) -f deploy/docker-compose.yml -f deploy/docker-compose.etcd.yml -f deploy/docker-compose.gossip.yml
 
 .PHONY: up down restart build logs status clean ps
 
@@ -26,7 +27,7 @@ up: build
 
 ## down: stop and remove containers
 down:
-	$(COMPOSE) down
+	$(ALL) down
 
 ## restart: full restart
 restart: down up
@@ -49,7 +50,7 @@ status:
 
 ## clean: tear down and remove volumes
 clean:
-	$(COMPOSE) down -v --remove-orphans
+	$(ALL) down -v --remove-orphans
 
 format:
 	go fmt ./...
