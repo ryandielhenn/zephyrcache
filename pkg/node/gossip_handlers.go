@@ -14,9 +14,6 @@ func (n *Node) handleGossip(msg *gossip.Message, addr string) {
 		return
 	}
 
-	// log.Printf("Receiving Message")
-	// log.Printf("%+v", *msg)
-
 	if msg.Payload != nil {
 		n.handlePayload(msg.Payload, msg.SourceId)
 	}
@@ -90,8 +87,6 @@ func (n *Node) handlePayload(msg *gossip.MessagePayload, sourceId string) {
 		return
 	}
 
-	// log.Printf("%+v", *msg)
-
 	for id, updatedPeer := range msg.Peers {
 		switch updatedPeer.Status {
 		case peer.Alive:
@@ -114,9 +109,9 @@ func (n *Node) handleAliveStatus(id string, updatedPeer peer.Peer, sourceId stri
 	if !ok && id == sourceId && updatedPeer.Incarnation == 0 {
 		peers := n.getPeerMap()
 		peers[n.id] = peer.Peer{
-			n.addr,
-			peer.Alive,
-			n.incarnation,
+			Addr:        n.addr,
+			Status:      peer.Alive,
+			Incarnation: n.incarnation,
 		}
 		delete(peers, id)
 		payload := gossip.NewPayload(peers, false)
@@ -184,9 +179,9 @@ func (n *Node) sendGossip(msg *gossip.Message, addr string) {
 func (n *Node) ConnectToCluster(addr string) {
 	peers := map[string]peer.Peer{
 		n.id: {
-			n.addr,
-			peer.Alive,
-			0,
+			Addr:        n.addr,
+			Status:      peer.Alive,
+			Incarnation: 0,
 		},
 	}
 	payload := gossip.NewPayload(peers, true)

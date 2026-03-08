@@ -28,7 +28,8 @@ func main() {
 	// 2. Connect to cluster
 	r.Add(id, addr)
 	n := node.NewNode(store, r, id, node.NormalizeHostPort(addr, "8080"))
-	if membershipService == "etcd" {
+	switch membershipService {
+	case "etcd":
 		// Create etcd client
 		log.Printf("[Boot] creating etcd client")
 		cli, err := clientv3.New(clientv3.Config{
@@ -42,13 +43,13 @@ func main() {
 		defer cli.Close()
 		defer node.BootstrapPeers(n, cli)()
 		node.WatchPeers(n, cli)
-	} else if membershipService == "gossip" {
+	case "gossip":
 		go node.StartGossipListener("4000", n)
 		if seedAddr != "" {
 			n.ConnectToCluster(seedAddr)
 		}
 		go node.StartGossipPinger(n)
-	} else {
+	default:
 		log.Printf("DISCOVERY must be set.")
 		return
 	}
