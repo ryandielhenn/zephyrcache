@@ -33,7 +33,6 @@ func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: level,
 	})))
-	slog.Info("GOSSIP_PORT set", "port", gossipPort)
 
 	// 2. Connect to cluster
 	r.Add(id, addr)
