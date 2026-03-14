@@ -2,8 +2,6 @@ module github.com/ryandielhenn/zephyrcache
 
 go 1.23.0
 
-toolchain go1.24.6
-
 require (
 	github.com/prometheus/client_golang v1.19.0
 	go.etcd.io/etcd/api/v3 v3.6.4

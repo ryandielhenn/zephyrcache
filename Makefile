@@ -52,6 +52,12 @@ status:
 clean:
 	$(ALL) down -v --remove-orphans
 
+test:
+	go test ./... -v
+
+bench:
+	go test -bench=BenchmarkPutGet -benchtime=5s -run=^$ -v ./cmd/bench -- -req=10000
+
 format:
 	go fmt ./...
 	gofmt -s -w .
