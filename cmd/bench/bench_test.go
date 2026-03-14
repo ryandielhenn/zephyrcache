@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -86,34 +87,44 @@ func startNode(id, seedGossipAddr string) cacheNode {
 	}
 }
 
-func BenchmarkPutGet(b *testing.B) {
+var (
+	testAddrs  []string
+	testClient *http.Client
+)
+
+func TestMain(m *testing.M) {
+	flag.Parse()
+
 	nodes := make([]cacheNode, *numNodes)
 	nodes[0] = startNode("node0", "")
 	for i := 1; i < *numNodes; i++ {
 		nodes[i] = startNode(fmt.Sprintf("node%d", i), nodes[0].gossipAddr)
 	}
-	defer func() {
-		for _, nd := range nodes {
-			nd.cleanup()
-		}
-	}()
 
-	b.Logf("waiting for %d-node cluster to converge...", *numNodes)
 	time.Sleep(500 * time.Millisecond)
 
-	addrs := make([]string, *numNodes)
+	testAddrs = make([]string, *numNodes)
 	for i, nd := range nodes {
-		addrs[i] = "http://" + nd.httpAddr
+		testAddrs[i] = "http://" + nd.httpAddr
 	}
-	b.Logf("cluster ready: %v", addrs)
 
-	client := &http.Client{
+	testClient = &http.Client{
 		Timeout: 5 * time.Second,
 		Transport: &http.Transport{
 			MaxIdleConnsPerHost: *conc,
 			MaxIdleConns:        *conc * *numNodes,
 		},
 	}
+
+	code := m.Run()
+
+	for _, nd := range nodes {
+		nd.cleanup()
+	}
+	os.Exit(code)
+}
+
+func BenchmarkPutGet(b *testing.B) {
 	var counter atomic.Uint64
 	payload := bytes.Repeat([]byte{byte(rand.Intn(255))}, *valSize)
 	sem := make(chan struct{}, *conc)
@@ -126,10 +137,10 @@ func BenchmarkPutGet(b *testing.B) {
 		go func(i int) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			addr := addrs[counter.Add(1)%uint64(len(addrs))]
+			addr := testAddrs[counter.Add(1)%uint64(len(testAddrs))]
 			key := fmt.Sprintf("k%d", i)
-			_, _ = client.Post(addr+"/kv/"+key, "application/octet-stream", bytes.NewReader(payload))
-			resp, _ := client.Get(addr + "/kv/" + key)
+			_, _ = testClient.Post(addr+"/kv/"+key, "application/octet-stream", bytes.NewReader(payload))
+			resp, _ := testClient.Get(addr + "/kv/" + key)
 			if resp != nil {
 				io.Copy(io.Discard, resp.Body)
 				resp.Body.Close()
