@@ -107,17 +107,23 @@ func BenchmarkPutGet(b *testing.B) {
 	}
 	b.Logf("cluster ready: %v", addrs)
 
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: &http.Transport{
+			MaxIdleConnsPerHost: *conc,
+			MaxIdleConns:        *conc * *numNodes,
+		},
+	}
 	var counter atomic.Uint64
 	payload := bytes.Repeat([]byte{byte(rand.Intn(255))}, *valSize)
 	sem := make(chan struct{}, *conc)
 	var wg sync.WaitGroup
 
 	b.ResetTimer()
-	for i := 0; i < *numReqs; i++ {
+	for i := 0; i < b.N; i++ {
 		sem <- struct{}{}
 		wg.Add(1)
-		go func() {
+		go func(i int) {
 			defer wg.Done()
 			defer func() { <-sem }()
 			addr := addrs[counter.Add(1)%uint64(len(addrs))]
@@ -128,10 +134,10 @@ func BenchmarkPutGet(b *testing.B) {
 				io.Copy(io.Discard, resp.Body)
 				resp.Body.Close()
 			}
-		}()
+		}(i)
 	}
 	wg.Wait()
 
 	elapsed := b.Elapsed()
-	b.ReportMetric(float64(*numReqs*2)/elapsed.Seconds(), "ops/s")
+	b.ReportMetric(float64(b.N*2)/elapsed.Seconds(), "ops/s")
 }
