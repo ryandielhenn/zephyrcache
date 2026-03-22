@@ -25,7 +25,7 @@ type Node struct {
 	incarnation  int
 	timeout      *time.Timer
 	gossipPort   string
-	mu           sync.RWMutex
+	mu           sync.Mutex
 }
 
 func NewNode(store *kv.Store, r *ring.HashRing, id string, addr string, gossipPort string) *Node {

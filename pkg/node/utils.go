@@ -31,8 +31,8 @@ func OverrideHostPort(addr, port string) string {
 
 // ownerForKey looks up the owner for a key and normalizes the address of the owner
 func (s *Node) OwnerForKey(key string) (ownerHP, selfHP string, ok bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	ownerID := s.ring.Lookup([]byte(key)) // e.g. "Node3"
 	ownerAddr, ok := s.ring.Addr(ownerID) // e.g. "Node3:8080" (what you stored)
 	if !ok || ownerAddr == "" {

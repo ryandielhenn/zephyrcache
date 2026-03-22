@@ -203,13 +203,13 @@ func (n *Node) attemptConnectToCluster(addr string) {
 func (n *Node) ConnectToCluster(addr string, attemptPeriod time.Duration) {
 	ticker := time.NewTicker(attemptPeriod)
 	for range ticker.C {
-		n.mu.RLock()
+		n.mu.Lock()
 		if len(n.peers) > 0 {
-			n.mu.RUnlock()
+			n.mu.Unlock()
 			break
 		}
 		n.attemptConnectToCluster(addr)
-		n.mu.RUnlock()
+		n.mu.Unlock()
 	}
 }
 
@@ -323,8 +323,8 @@ func StartGossipPinger(node *Node, opts ...pingerOption) {
 		suspect := node.suspectPeer
 		// send ping req to k random peers after timeout
 		node.timeout = time.AfterFunc(cfg.timeout, func() {
-			node.mu.RLock()
-			defer node.mu.RUnlock()
+			node.mu.Lock()
+			defer node.mu.Unlock()
 			for _, id := range node.getKRandomPeers(cfg.k) {
 				if id == suspect {
 					continue
