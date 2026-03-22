@@ -93,6 +93,8 @@ func main() {
 		switch req.Method {
 		case http.MethodPut, http.MethodPost:
 			n.PutReplica(w, req)
+		case http.MethodDelete:
+			n.DelReplica(w, req)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}

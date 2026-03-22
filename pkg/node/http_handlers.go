@@ -197,22 +197,56 @@ func (n *Node) Get(w http.ResponseWriter, req *http.Request) {
 	w.Write(val)
 }
 
+func (n *Node) DelReplica(w http.ResponseWriter, req *http.Request) {
+	key := req.URL.Path[len("/replica/"):]
+	slog.Info("[Deleting Replica]", "url", req.URL.Path, "self id", n.addr)
+	n.kv.Delete(key)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // del removes a key
 func (n *Node) Del(w http.ResponseWriter, req *http.Request) {
 	key := req.URL.Path[len("/kv/"):]
-	owner, self, ok := n.OwnerForKey(key)
-	if !ok {
-		http.Error(w, "no owner for key", http.StatusServiceUnavailable)
+	replicaAddrs := n.ReplicasForKey(key, 3)
+	if len(replicaAddrs) == 0 {
+		http.Error(w, "no owner or replicas for key", http.StatusServiceUnavailable)
 		return
 	}
 
-	if owner != self {
-		slog.Info("[Forward DEL]", "key", key, "owner", owner, "self", self)
-		n.Forward(w, req, owner)
+	body, err := readBody(req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// handle local case
-	n.kv.Delete(key)
+	selfAddr := NormalizeHostPort(n.addr, "8080")
+	var wg sync.WaitGroup
+	for _, addr := range replicaAddrs {
+		wg.Add(1)
+		go func(repAddr string) {
+			defer wg.Done()
+			if repAddr == selfAddr {
+				// handle local case
+				slog.Info("[Deleting Replica]", "url", req.URL.Path, "self addr", selfAddr)
+				n.kv.Delete(key)
+			} else {
+				slog.Info("[Forward DEL]", "key", key, "replica", repAddr, "self", selfAddr)
+				replicaURL := "http://" + repAddr + "/replica/" + key
+
+				repReq, err := http.NewRequestWithContext(req.Context(), http.MethodDelete, replicaURL, bytes.NewReader(body))
+				if err != nil {
+					slog.Warn("error building delete replica request", "err", err)
+					return
+				}
+				resp, err := http.DefaultClient.Do(repReq)
+				if err != nil {
+					slog.Warn("error forwarding delete to replica", "err", err, "replica", repAddr)
+					return
+				}
+				resp.Body.Close()
+			}
+		}(addr)
+	}
+	wg.Wait()
 	w.WriteHeader(http.StatusNoContent)
 }
