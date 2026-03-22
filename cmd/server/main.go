@@ -75,7 +75,7 @@ func main() {
 	mux.HandleFunc("/kv/", func(w http.ResponseWriter, req *http.Request) {
 		op := methodToOp(req.Method) // "get" | "put" | "post" | "delete" | "other"
 		telemetry.Instrument(op, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			slog.Info("Received HTTP Request")
+			slog.Info("Received HTTP KV Request", "type", r.Method)
 			switch r.Method {
 			case http.MethodPut, http.MethodPost:
 				n.Put(w, r)
@@ -87,6 +87,15 @@ func main() {
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			}
 		})).ServeHTTP(w, req)
+	})
+	mux.HandleFunc("/replica/", func(w http.ResponseWriter, req *http.Request) {
+		slog.Info("Received HTTP Replica Request", "type", req.Method)
+		switch req.Method {
+		case http.MethodPut, http.MethodPost:
+			n.PutReplica(w, req)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
 	})
 
 	addr = ":8080"

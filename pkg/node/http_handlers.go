@@ -1,12 +1,15 @@
 package node
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -72,38 +75,100 @@ func (s *Node) Forward(w http.ResponseWriter, req *http.Request, owner string) {
 
 }
 
-// put adds a key/value pair
+func readBody(req *http.Request) ([]byte, error) {
+	b, err := io.ReadAll(req.Body)
+	if err != nil && err.Error() != "EOF" {
+		return nil, err
+	}
+	return b, nil
+}
+
+func parseTTL(req *http.Request) (time.Duration, error) {
+	ttlStr := req.URL.Query().Get("ttl")
+	if ttlStr == "" {
+		return 0, nil
+	}
+	sec, err := strconv.Atoi(ttlStr)
+	if err != nil {
+		return 0, fmt.Errorf("invalid ttl")
+	}
+	return time.Duration(sec) * time.Second, nil
+}
+
+// put adds a key/value pair, writing to all replicas.
 func (n *Node) Put(w http.ResponseWriter, req *http.Request) {
 	key := req.URL.Path[len("/kv/"):]
-	owner, self, ok := n.OwnerForKey(key)
-	if !ok {
-		http.Error(w, "no owner for key", http.StatusServiceUnavailable)
-		return
-	}
 
-	if owner != self {
-		slog.Info("[Forward PUT]", "key", key, "owner", owner, "self", self)
-		n.Forward(w, req, owner)
-		return
-	}
-
-	// handle local case
-	val, err := io.ReadAll(req.Body)
-	if err != nil && err.Error() != "EOF" {
+	body, err := readBody(req)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	var ttl time.Duration
-	if ttlStr := req.URL.Query().Get("ttl"); ttlStr != "" {
-		sec, err := strconv.Atoi(ttlStr)
-		if err != nil {
-			http.Error(w, "invalid ttl", http.StatusBadRequest)
-			return
-		}
-		ttl = time.Duration(sec) * time.Second
+	ttl, err := parseTTL(req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
-	n.kv.Put(key, val, ttl)
+
+	replicaAddrs := n.ReplicasForKey(key, 3)
+	if len(replicaAddrs) == 0 {
+		http.Error(w, "no owner or replicas for key", http.StatusServiceUnavailable)
+		return
+	}
+
+	selfAddr := NormalizeHostPort(n.addr, "8080")
+	var wg sync.WaitGroup
+	for _, repAddr := range replicaAddrs {
+		wg.Add(1)
+		go func(repAddr string) {
+			defer wg.Done()
+			if repAddr == selfAddr {
+				slog.Info("[Writing Replica]", "url", req.URL.Path, "self addr", selfAddr)
+				n.kv.Put(key, body, ttl)
+			} else {
+				slog.Info("[Forward PUT]", "key", key, "replica", repAddr, "self", selfAddr)
+				replicaURL := "http://" + repAddr + "/replica/" + key
+				if q := req.URL.RawQuery; q != "" {
+					replicaURL += "?" + q
+				}
+				repReq, err := http.NewRequestWithContext(req.Context(), http.MethodPut, replicaURL, bytes.NewReader(body))
+				if err != nil {
+					slog.Warn("error building replication request", "err", err)
+					return
+				}
+				resp, err := http.DefaultClient.Do(repReq)
+				if err != nil {
+					slog.Warn("error forwarding to replica", "err", err, "replica", repAddr)
+					return
+				}
+				resp.Body.Close()
+			}
+		}(repAddr)
+	}
+
+	wg.Wait()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// putReplica writes the key/value pair to the local store (called by the primary).
+func (n *Node) PutReplica(w http.ResponseWriter, req *http.Request) {
+	key := req.URL.Path[len("/replica/"):]
+	slog.Info("[Writing Replica]", "url", req.URL.Path, "self id", n.addr)
+
+	body, err := readBody(req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	ttl, err := parseTTL(req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	n.kv.Put(key, body, ttl)
 	w.WriteHeader(http.StatusNoContent)
 }
 
