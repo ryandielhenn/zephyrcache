@@ -46,7 +46,7 @@ func WatchPeers(node *Node, cli *clientv3.Client) {
 			normalizedPeers[id] = NormalizeHostPort(addr, "8080")
 		}
 		node.syncPeers(normalizedPeers)
-		slog.Info("[WatchPeers Callback] synced %d peers\n", len(peers))
+		slog.Info("[WatchPeers Callback] synced", "peers", len(peers))
 	})
 	slog.Info("[BOOT] after WatchPeers")
 }

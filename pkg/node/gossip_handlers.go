@@ -76,7 +76,7 @@ func (n *Node) handlePingAck(msg *gossip.Message) {
 	}
 	payload := n.removeGossip()
 	message := gossip.NewMessage(
-		gossip.Ping,
+		gossip.PingAck,
 		msg.SubjectId,
 		n.id,
 		msg.OriginId,
@@ -203,10 +203,13 @@ func (n *Node) attemptConnectToCluster(addr string) {
 func (n *Node) ConnectToCluster(addr string, attemptPeriod time.Duration) {
 	ticker := time.NewTicker(attemptPeriod)
 	for range ticker.C {
+		n.mu.RLock()
 		if len(n.peers) > 0 {
+			n.mu.RUnlock()
 			break
 		}
 		n.attemptConnectToCluster(addr)
+		n.mu.RUnlock()
 	}
 }
 
@@ -238,8 +241,9 @@ func StartGossipListener(node *Node) {
 		if err := json.Unmarshal(data, &msg); err != nil {
 			continue
 		}
-
+		node.mu.Lock()
 		node.handleGossip(&msg, addr.String())
+		node.mu.Unlock()
 	}
 }
 
@@ -285,6 +289,7 @@ func StartGossipPinger(node *Node, opts ...pingerOption) {
 
 	for range ticker.C {
 		// declare peer dead if has not been acked since last ping
+		node.mu.Lock()
 		if node.suspectPeer != "" {
 			peerBody, ok := node.peers[node.suspectPeer]
 			if ok {
@@ -303,6 +308,7 @@ func StartGossipPinger(node *Node, opts ...pingerOption) {
 		node.suspectPeer = node.getRandomPeer()
 		peerBody, ok := node.peers[node.suspectPeer]
 		if !ok {
+			node.mu.Unlock()
 			continue
 		}
 		message := gossip.NewMessage(
@@ -314,10 +320,13 @@ func StartGossipPinger(node *Node, opts ...pingerOption) {
 		)
 		node.sendGossip(message, peerBody.Addr)
 
+		suspect := node.suspectPeer
 		// send ping req to k random peers after timeout
 		node.timeout = time.AfterFunc(cfg.timeout, func() {
+			node.mu.RLock()
+			defer node.mu.RUnlock()
 			for _, id := range node.getKRandomPeers(cfg.k) {
-				if id == node.suspectPeer {
+				if id == suspect {
 					continue
 				}
 				peerBody, ok := node.peers[id]
@@ -326,7 +335,7 @@ func StartGossipPinger(node *Node, opts ...pingerOption) {
 				}
 				message := gossip.NewMessage(
 					gossip.PingReq,
-					id,
+					suspect,
 					node.id,
 					node.id,
 					payload,
@@ -334,5 +343,6 @@ func StartGossipPinger(node *Node, opts ...pingerOption) {
 				node.sendGossip(message, peerBody.Addr)
 			}
 		})
+		node.mu.Unlock()
 	}
 }

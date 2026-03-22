@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"math"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/ryandielhenn/zephyrcache/pkg/gossip"
@@ -24,6 +25,7 @@ type Node struct {
 	incarnation  int
 	timeout      *time.Timer
 	gossipPort   string
+	mu           sync.RWMutex
 }
 
 func NewNode(store *kv.Store, r *ring.HashRing, id string, addr string, gossipPort string) *Node {
