@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"math/rand"
 	"net"
 	"net/http"
@@ -93,6 +94,7 @@ var (
 
 func TestMain(m *testing.M) {
 	flag.Parse()
+	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	nodes := make([]cacheNode, *numNodes)
 	nodes[0] = startNode("node0", "")
