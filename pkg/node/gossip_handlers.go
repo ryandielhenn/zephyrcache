@@ -10,7 +10,7 @@ import (
 	"github.com/ryandielhenn/zephyrcache/pkg/peer"
 )
 
-func (n *Node) handleGossip(msg *gossip.Message, addr string) {
+func (n *Node) handleGossip(msg *gossip.Message) {
 	if msg == nil {
 		return
 	}
@@ -26,7 +26,7 @@ func (n *Node) handleGossip(msg *gossip.Message, addr string) {
 
 	switch msg.Type {
 	case gossip.Ping:
-		n.handlePing(msg, addr)
+		n.handlePing(msg)
 	case gossip.PingReq:
 		n.handlePingReq(msg)
 	case gossip.PingAck:
@@ -34,8 +34,23 @@ func (n *Node) handleGossip(msg *gossip.Message, addr string) {
 	}
 }
 
-func (n *Node) handlePing(msg *gossip.Message, addr string) {
+func (n *Node) handlePing(msg *gossip.Message) {
+	peerBody, ok := n.peers[msg.SourceId]
+	if !ok {
+		return
+	}
 	payload := n.removeGossip()
+	if peerBody.Status == peer.Dead {
+		if payload == nil {
+			peers := make(map[string]peer.Peer)
+			payload = gossip.NewPayload(peers, false)
+		}
+		payload.Peers[msg.SourceId] = peer.Peer{
+			Addr:        peerBody.Addr,
+			Status:      peer.Suspected,
+			Incarnation: peerBody.Incarnation,
+		}
+	}
 	message := gossip.NewMessage(
 		gossip.PingAck,
 		msg.SubjectId,
@@ -43,7 +58,7 @@ func (n *Node) handlePing(msg *gossip.Message, addr string) {
 		msg.OriginId,
 		payload,
 	)
-	n.sendGossip(message, addr)
+	n.sendGossip(message, peerBody.Addr)
 }
 
 func (n *Node) handlePingReq(msg *gossip.Message) {
@@ -63,16 +78,19 @@ func (n *Node) handlePingReq(msg *gossip.Message) {
 }
 
 func (n *Node) handlePingAck(msg *gossip.Message) {
-	// when a ping ack for suspected node is received
-	// we stop the ping req timeout and reset the suspected peer
-	if msg.OriginId == n.id && n.suspectPeer == msg.SubjectId {
-		if n.timeout != nil {
-			n.timeout.Stop()
-			n.timeout = nil
+	// handle ack at node that requested it
+	if msg.OriginId == n.id {
+		if n.targetPeer == msg.SubjectId {
+			if n.timeout != nil {
+				n.timeout.Stop()
+				n.timeout = nil
+			}
+			n.targetPeer = ""
 		}
-		n.suspectPeer = ""
 		return
 	}
+
+	// handle forwarding ack when ping req
 	peerBody, ok := n.peers[msg.OriginId]
 	if !ok {
 		return
@@ -99,6 +117,8 @@ func (n *Node) handlePayload(msg *gossip.MessagePayload, sourceId string) {
 		switch updatedPeer.Status {
 		case peer.Alive:
 			n.handleAliveStatus(id, updatedPeer, sourceId)
+		case peer.Suspected:
+			n.handleSuspectedStatus(id, updatedPeer)
 		case peer.Dead:
 			n.handleDeadStatus(id, updatedPeer)
 		}
@@ -128,36 +148,79 @@ func (n *Node) handleAliveStatus(id string, updatedPeer peer.Peer, sourceId stri
 
 	// determine whether message is stale or not
 	// update peer status if not stale and propagate update to other nodes
-	shouldUpdate := !ok || (updatedPeer.Incarnation > currentPeer.Incarnation)
+	shouldUpdate := !ok || updatedPeer.Supersedes(currentPeer)
 	if shouldUpdate {
 		n.setPeer(id, updatedPeer)
 		peers := map[string]peer.Peer{
 			id: updatedPeer,
 		}
 		payload := gossip.NewPayload(peers, true)
-		n.addGossip(payload)
+		n.enqGossip(payload)
+	}
+}
+
+func (n *Node) handleSuspectedStatus(id string, updatedPeer peer.Peer) {
+	// drop payloads about yourself
+	if id == n.id {
+		// refute updates saying you are suspected
+		if updatedPeer.Incarnation == n.incarnation {
+			n.incarnation += 1
+		}
+		peers := map[string]peer.Peer{
+			n.id: {
+				Addr:        n.addr,
+				Status:      peer.Alive,
+				Incarnation: n.incarnation,
+			},
+		}
+		payload := gossip.NewPayload(peers, true)
+		n.prependGossip(payload)
+		return
+	}
+
+	// determine whether message is stale or not
+	// update peer status if not stale and propagate update to other nodes
+	currentPeer, ok := n.peers[id]
+	shouldUpdate := !ok || updatedPeer.Supersedes(currentPeer)
+	if shouldUpdate {
+		n.setPeer(id, updatedPeer)
+		peers := map[string]peer.Peer{
+			id: updatedPeer,
+		}
+		payload := gossip.NewPayload(peers, true)
+		n.enqGossip(payload)
+		// TODO REFACTOR TO USE A CONFIGURED TIMEOUT
+		time.AfterFunc(600*time.Millisecond, func() {
+			n.mu.Lock()
+			defer n.mu.Unlock()
+
+			peerBody, ok := n.peers[id]
+			if !ok || peerBody.Status != peer.Suspected {
+				return
+			}
+			peerBody.Status = peer.Dead
+			n.setPeer(id, peerBody)
+			peers := map[string]peer.Peer{
+				id: peerBody,
+			}
+			payload := gossip.NewPayload(peers, true)
+			n.enqGossip(payload)
+		})
 	}
 }
 
 func (n *Node) handleDeadStatus(id string, updatedPeer peer.Peer) {
-	// drop payloads about yourself
-	if id == n.id {
-		return
-	}
-	currentPeer, ok := n.peers[id]
-
 	// determine whether message is stale or not
 	// update peer status if not stale and propagate update to other nodes
-	// dead status has precedence over alive messages for equal incarnation
-	shouldUpdate := !ok || (updatedPeer.Incarnation > currentPeer.Incarnation ||
-		updatedPeer.Incarnation == currentPeer.Incarnation && currentPeer.Status == peer.Alive)
+	currentPeer, ok := n.peers[id]
+	shouldUpdate := !ok || updatedPeer.Supersedes(currentPeer)
 	if shouldUpdate {
 		n.setPeer(id, updatedPeer)
 		peers := map[string]peer.Peer{
 			id: updatedPeer,
 		}
 		payload := gossip.NewPayload(peers, true)
-		n.addGossip(payload)
+		n.enqGossip(payload)
 	}
 }
 
@@ -184,9 +247,14 @@ func (n *Node) sendGossip(msg *gossip.Message, addr string) {
 	}
 }
 
-func (n *Node) attemptConnectToCluster(addr string) {
+func (n *Node) attemptConnectToCluster(addr string) bool {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+
+	if len(n.peers) > 0 {
+		return true
+	}
+
 	peers := map[string]peer.Peer{
 		n.id: {
 			Addr:        n.addr,
@@ -203,15 +271,16 @@ func (n *Node) attemptConnectToCluster(addr string) {
 		payload,
 	)
 	n.sendGossip(message, addr)
+
+	return false
 }
 
 func (n *Node) ConnectToCluster(addr string, attemptPeriod time.Duration) {
 	ticker := time.NewTicker(attemptPeriod)
 	for range ticker.C {
-		if len(n.peers) > 0 {
+		if n.attemptConnectToCluster(addr) {
 			break
 		}
-		n.attemptConnectToCluster(addr)
 	}
 }
 
@@ -231,7 +300,7 @@ func StartGossipListener(node *Node) {
 
 	buffer := make([]byte, 1024)
 	for {
-		n, addr, err := conn.ReadFromUDP(buffer)
+		n, _, err := conn.ReadFromUDP(buffer)
 		if err != nil {
 			continue
 		}
@@ -243,16 +312,15 @@ func StartGossipListener(node *Node) {
 		if err := json.Unmarshal(data, &msg); err != nil {
 			continue
 		}
-		node.mu.Lock()
-		node.handleGossip(&msg, addr.String())
-		node.mu.Unlock()
+		node.handleGossip(&msg)
 	}
 }
 
 type pingerConfig struct {
-	period  time.Duration
-	timeout time.Duration
-	k       int
+	period           time.Duration
+	pingTimeout      time.Duration
+	suspectedTimeout time.Duration
+	k                int
 }
 
 type pingerOption func(*pingerConfig)
@@ -263,9 +331,15 @@ func WithPeriod(period time.Duration) pingerOption {
 	}
 }
 
-func WithTimeout(timeout time.Duration) pingerOption {
+func WithPingTimeout(timeout time.Duration) pingerOption {
 	return func(c *pingerConfig) {
-		c.timeout = timeout
+		c.pingTimeout = timeout
+	}
+}
+
+func WithSuspectedTimeout(timeout time.Duration) pingerOption {
+	return func(c *pingerConfig) {
+		c.suspectedTimeout = timeout
 	}
 }
 
@@ -275,11 +349,92 @@ func WithK(k int) pingerOption {
 	}
 }
 
+func runGossipPing(node *Node, cfg *pingerConfig) {
+	node.mu.Lock()
+	defer node.mu.Unlock()
+
+	// propagate SUSPECTED if ALIVE target not been acked since last ping
+	if node.targetPeer != "" {
+		peerBody, ok := node.peers[node.targetPeer]
+		if ok && peerBody.Status == peer.Alive {
+			peerBody.Status = peer.Suspected
+			node.setPeer(node.targetPeer, peerBody)
+			peers := map[string]peer.Peer{
+				node.targetPeer: peerBody,
+			}
+			payload := gossip.NewPayload(peers, true)
+			node.enqGossip(payload)
+
+			// set timeout to declare dead if SUSPECTED for long enough
+			targetPeer := node.targetPeer
+			time.AfterFunc(cfg.suspectedTimeout, func() {
+				node.mu.Lock()
+				defer node.mu.Unlock()
+
+				peerBody, ok := node.peers[targetPeer]
+				if !ok || peerBody.Status != peer.Suspected {
+					return
+				}
+				peerBody.Status = peer.Dead
+				node.setPeer(targetPeer, peerBody)
+				peers := map[string]peer.Peer{
+					targetPeer: peerBody,
+				}
+				payload := gossip.NewPayload(peers, true)
+				node.enqGossip(payload)
+			})
+		}
+	}
+
+	// send ping to new random target peer
+	node.targetPeer = node.getRandomPeer()
+	peerBody, ok := node.peers[node.targetPeer]
+	if !ok {
+		return
+	}
+	payload := node.removeGossip()
+	message := gossip.NewMessage(
+		gossip.Ping,
+		node.targetPeer,
+		node.id,
+		node.id,
+		payload,
+	)
+	node.sendGossip(message, peerBody.Addr)
+
+	// send ping req to k random peers after timeout
+	targetPeer := node.targetPeer
+	node.timeout = time.AfterFunc(cfg.pingTimeout, func() {
+		node.mu.Lock()
+		defer node.mu.Unlock()
+
+		for _, id := range node.getKRandomPeers(cfg.k) {
+			if id == targetPeer {
+				continue
+			}
+			peerBody, ok := node.peers[id]
+			if !ok {
+				continue
+			}
+			payload := node.removeGossip()
+			message := gossip.NewMessage(
+				gossip.PingReq,
+				targetPeer,
+				node.id,
+				node.id,
+				payload,
+			)
+			node.sendGossip(message, peerBody.Addr)
+		}
+	})
+}
+
 func StartGossipPinger(node *Node, opts ...pingerOption) {
 	cfg := &pingerConfig{
-		period:  1 * time.Second,
-		timeout: 500 * time.Millisecond,
-		k:       3,
+		period:           1 * time.Second,
+		pingTimeout:      500 * time.Millisecond,
+		suspectedTimeout: 3 * time.Second,
+		k:                3,
 	}
 
 	for _, opt := range opts {
@@ -290,61 +445,6 @@ func StartGossipPinger(node *Node, opts ...pingerOption) {
 	defer ticker.Stop()
 
 	for range ticker.C {
-		// declare peer dead if has not been acked since last ping
-		node.mu.Lock()
-		if node.suspectPeer != "" {
-			peerBody, ok := node.peers[node.suspectPeer]
-			if ok {
-				peerBody.Status = peer.Dead
-				peers := map[string]peer.Peer{
-					node.suspectPeer: peerBody,
-				}
-				payload := gossip.NewPayload(peers, true)
-				node.addGossip(payload)
-				node.setPeer(node.suspectPeer, peerBody)
-			}
-		}
-
-		// send ping to new random suspected peer
-		payload := node.removeGossip()
-		node.suspectPeer = node.getRandomPeer()
-		peerBody, ok := node.peers[node.suspectPeer]
-		if !ok {
-			node.mu.Unlock()
-			continue
-		}
-		message := gossip.NewMessage(
-			gossip.Ping,
-			node.suspectPeer,
-			node.id,
-			node.id,
-			payload,
-		)
-		node.sendGossip(message, peerBody.Addr)
-
-		suspect := node.suspectPeer
-		// send ping req to k random peers after timeout
-		node.timeout = time.AfterFunc(cfg.timeout, func() {
-			node.mu.Lock()
-			defer node.mu.Unlock()
-			for _, id := range node.getKRandomPeers(cfg.k) {
-				if id == suspect {
-					continue
-				}
-				peerBody, ok := node.peers[id]
-				if !ok {
-					continue
-				}
-				message := gossip.NewMessage(
-					gossip.PingReq,
-					suspect,
-					node.id,
-					node.id,
-					payload,
-				)
-				node.sendGossip(message, peerBody.Addr)
-			}
-		})
-		node.mu.Unlock()
+		runGossipPing(node, cfg)
 	}
 }

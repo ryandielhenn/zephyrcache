@@ -56,7 +56,8 @@ func startNode(id, seedGossipAddr string) cacheNode {
 	go node.StartGossipListener(n)
 	go node.StartGossipPinger(n,
 		node.WithPeriod(50*time.Millisecond),
-		node.WithTimeout(50*time.Millisecond),
+		node.WithPingTimeout(50*time.Millisecond),
+		node.WithSuspectedTimeout(150*time.Millisecond),
 	)
 	if seedGossipAddr != "" {
 		go n.ConnectToCluster(seedGossipAddr, 50*time.Millisecond)
