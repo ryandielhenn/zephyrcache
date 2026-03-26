@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"math/rand"
 	"net"
 	"net/http"
@@ -73,7 +74,10 @@ func startNode(id, seedGossipAddr string) cacheNode {
 		}
 	})
 	srv := &http.Server{Handler: mux}
-	go srv.Serve(listener)
+	go func() {
+		err := srv.Serve(listener)
+		slog.Info("HTTP server error", "node", id, "err", err.Error())
+	}()
 
 	return cacheNode{
 		httpAddr:   httpAddr,
@@ -141,7 +145,10 @@ func BenchmarkPutGet(b *testing.B) {
 			_, _ = testClient.Post(addr+"/kv/"+key, "application/octet-stream", bytes.NewReader(payload))
 			resp, _ := testClient.Get(addr + "/kv/" + key)
 			if resp != nil {
-				io.Copy(io.Discard, resp.Body)
+				_, err := io.Copy(io.Discard, resp.Body)
+				if err != nil {
+					slog.Info("Error draining response")
+				}
 				resp.Body.Close()
 			}
 		}(i)
