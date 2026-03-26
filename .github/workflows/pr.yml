@@ -18,7 +18,9 @@ jobs:
             echo "$unformatted"
             exit 1
           fi
-      - name: Linter (golangci-lint)
-        run: golangci-lint run
+      - name: golangci-lint 
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.64
       - name: Run tests 
         run: go test -v ./...
