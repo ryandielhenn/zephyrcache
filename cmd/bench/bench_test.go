@@ -2,6 +2,7 @@ package bench
 
 import (
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -76,8 +77,9 @@ func startNode(id, seedGossipAddr string) cacheNode {
 	})
 	srv := &http.Server{Handler: mux}
 	go func() {
-		err := srv.Serve(listener)
-		slog.Info("HTTP server error", "node", id, "err", err.Error())
+		if err := srv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Info("HTTP server error", "node", id, "err", err.Error())
+		}
 	}()
 
 	return cacheNode{
