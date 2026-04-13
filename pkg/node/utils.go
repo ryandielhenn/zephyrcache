@@ -1,8 +1,13 @@
 package node
 
 import (
+	"fmt"
+	"io"
 	"net"
+	"net/http"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // normalizeHostPort cuts the http:// https:// prefixes from the input address
@@ -53,4 +58,24 @@ func (n *Node) ReplicasForKey(key string, replicas int) (replicaAddrs []string) 
 
 	}
 	return addrs
+}
+
+func readBody(req *http.Request) ([]byte, error) {
+	b, err := io.ReadAll(req.Body)
+	if err != nil && err.Error() != "EOF" {
+		return nil, err
+	}
+	return b, nil
+}
+
+func parseTTL(req *http.Request) (time.Duration, error) {
+	ttlStr := req.URL.Query().Get("ttl")
+	if ttlStr == "" {
+		return 0, nil
+	}
+	sec, err := strconv.Atoi(ttlStr)
+	if err != nil {
+		return 0, fmt.Errorf("invalid ttl")
+	}
+	return time.Duration(sec) * time.Second, nil
 }
