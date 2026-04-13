@@ -14,7 +14,10 @@ import (
 // healthz returns 200 OK to indicate the Node is alive.
 func (s *Node) Healthz(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("ok"))
+	_, err := w.Write([]byte("ok"))
+	if err != nil {
+		slog.Warn("Could not write http response header for healthcheck request")
+	}
 }
 
 // info writes a JSON payload with the process ID, current time, and KV item count.
@@ -26,7 +29,10 @@ func (s *Node) Info(w http.ResponseWriter, _ *http.Request) {
 	}
 	data, _ := json.Marshal(resp{PID: os.Getpid(), Now: time.Now(), Items: s.kv.Len()})
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(data)
+	_, err := w.Write(data)
+	if err != nil {
+		slog.Warn("Could not write http response header for info request")
+	}
 }
 
 // forward forwards a http request to the Node that owns the key
@@ -69,8 +75,10 @@ func (s *Node) Forward(w http.ResponseWriter, req *http.Request, owner string) {
 		}
 	}
 	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
-
+	_, err = io.Copy(w, resp.Body)
+	if err != nil {
+		slog.Info("Error copying forwarded response")
+	}
 }
 
 // put adds a key/value pair, writing to all replicas.
@@ -151,7 +159,10 @@ func (n *Node) Get(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Write(val)
+	_, err := w.Write(val)
+	if err != nil {
+		slog.Info("Error writing response for GET request")
+	}
 }
 
 // del removes a key

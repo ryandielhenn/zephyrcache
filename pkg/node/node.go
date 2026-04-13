@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"math"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/ryandielhenn/zephyrcache/pkg/gossip"
@@ -17,13 +18,14 @@ type Node struct {
 	ring         *ring.HashRing
 	gossipQueue  []*gossip.MessagePayload
 	maxGossipLen int
-	suspectPeer  string
+	targetPeer   string
 	peers        map[string]peer.Peer
 	id           string
 	addr         string
 	incarnation  int
 	timeout      *time.Timer
 	gossipPort   string
+	mu           sync.Mutex
 }
 
 func NewNode(store *kv.Store, r *ring.HashRing, id string, addr string, gossipPort string) *Node {
@@ -31,8 +33,7 @@ func NewNode(store *kv.Store, r *ring.HashRing, id string, addr string, gossipPo
 		kv:           store,
 		ring:         r,
 		gossipQueue:  make([]*gossip.MessagePayload, 0),
-		maxGossipLen: 3,
-		suspectPeer:  "",
+		maxGossipLen: 50,
 		peers:        make(map[string]peer.Peer),
 		id:           id,
 		addr:         addr,
@@ -41,11 +42,29 @@ func NewNode(store *kv.Store, r *ring.HashRing, id string, addr string, gossipPo
 	}
 }
 
-func (n *Node) addGossip(msg *gossip.MessagePayload) {
-	if len(n.gossipQueue) == n.maxGossipLen {
-		n.gossipQueue = n.gossipQueue[1:]
+func (n *Node) enqGossip(newMsg *gossip.MessagePayload) {
+	if newMsg == nil {
+		return
 	}
-	n.gossipQueue = append(n.gossipQueue, msg)
+	for _, oldMsg := range n.gossipQueue {
+		if oldMsg == nil {
+			continue
+		}
+		// replace stale updates about peers in old message
+		for id, newPeer := range newMsg.Peers {
+			if oldPeer, ok := oldMsg.Peers[id]; ok {
+				if newPeer.Supersedes(oldPeer) {
+					oldMsg.Peers[id] = newPeer
+					oldMsg.TransmitCount = 1
+				}
+				delete(newMsg.Peers, id)
+			}
+		}
+	}
+	if len(newMsg.Peers) == 0 || len(n.gossipQueue) == n.maxGossipLen {
+		return
+	}
+	n.gossipQueue = append(n.gossipQueue, newMsg)
 }
 
 func (n *Node) prependGossip(msg *gossip.MessagePayload) {
@@ -63,31 +82,40 @@ func (n *Node) removeGossip() *gossip.MessagePayload {
 		msg.TransmitCount += 1
 		n.gossipQueue = append(n.gossipQueue, msg)
 	}
-
 	return msg
 }
 
 func (n *Node) countPeers() int {
 	count := 0
 	for _, peerBody := range n.peers {
-		if peerBody.Status == peer.Alive {
+		if peerBody.Status != peer.Dead {
 			count += 1
 		}
 	}
 	return count
 }
 
-func (n *Node) setPeer(id string, peerBody peer.Peer) {
-	_, ok := n.peers[id]
-	if ok {
+func (n *Node) setPeer(id string, updatedPeer peer.Peer) {
+	currentPeer, ok := n.peers[id]
+
+	shouldRemove := ok && currentPeer.Status != peer.Dead &&
+		updatedPeer.Status == peer.Dead
+	if shouldRemove {
 		n.ring.Remove(id)
 	}
-	if peerBody.Status == peer.Alive {
-		n.ring.Add(id, peerBody.Addr)
+
+	shouldAdd := (!ok || currentPeer.Status == peer.Dead) &&
+		updatedPeer.Status != peer.Dead
+	if shouldAdd {
+		n.ring.Add(id, updatedPeer.Addr)
 	}
-	n.peers[id] = peerBody
-	peerIds := n.getPeerList()
-	slog.Info("Peers", "peer ids", peerIds)
+
+	n.peers[id] = updatedPeer
+
+	if shouldRemove || shouldAdd {
+		peerIds := n.getPeerList()
+		slog.Info("Peers", "peer ids", peerIds)
+	}
 }
 
 func (n *Node) addPeer(id string, peerHP string) {

@@ -28,7 +28,10 @@ func main() {
 	gossipPort := cmp.Or(os.Getenv("GOSSIP_PORT"), "4000")
 	var level slog.Level
 	if lvl := os.Getenv("LOG_LEVEL"); lvl != "" {
-		level.UnmarshalText([]byte(lvl))
+		err := level.UnmarshalText([]byte(lvl))
+		if err != nil {
+			slog.Info("Error reading LOG_LEVEL configuration")
+		}
 	}
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: level,
@@ -60,7 +63,8 @@ func main() {
 		go node.StartGossipPinger(
 			n,
 			node.WithPeriod(200*time.Millisecond),
-			node.WithTimeout(100*time.Millisecond),
+			node.WithPingTimeout(100*time.Millisecond),
+			node.WithSuspectedTimeout(600*time.Millisecond),
 		)
 	default:
 		slog.Info("DISCOVERY must be set.")

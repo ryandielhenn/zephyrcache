@@ -25,7 +25,7 @@ const (
 	PingAck MessageType = "ping_ack"
 )
 
-func NewMessage(msgType MessageType, subjectId string, sourceId, originId string, payload *MessagePayload) *Message {
+func NewMessage(msgType MessageType, subjectId, sourceId, originId string, payload *MessagePayload) *Message {
 	return &Message{
 		Type:      msgType,
 		SubjectId: subjectId,

@@ -2,6 +2,7 @@ package bench
 
 import (
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -56,7 +57,8 @@ func startNode(id, seedGossipAddr string) cacheNode {
 	go node.StartGossipListener(n)
 	go node.StartGossipPinger(n,
 		node.WithPeriod(50*time.Millisecond),
-		node.WithTimeout(50*time.Millisecond),
+		node.WithPingTimeout(50*time.Millisecond),
+		node.WithSuspectedTimeout(150*time.Millisecond),
 	)
 	if seedGossipAddr != "" {
 		go n.ConnectToCluster(seedGossipAddr, 50*time.Millisecond)
@@ -74,7 +76,11 @@ func startNode(id, seedGossipAddr string) cacheNode {
 		}
 	})
 	srv := &http.Server{Handler: mux}
-	go srv.Serve(listener)
+	go func() {
+		if err := srv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Info("HTTP server error", "node", id, "err", err.Error())
+		}
+	}()
 
 	return cacheNode{
 		httpAddr:   httpAddr,
@@ -143,7 +149,10 @@ func BenchmarkPutGet(b *testing.B) {
 			_, _ = testClient.Post(addr+"/kv/"+key, "application/octet-stream", bytes.NewReader(payload))
 			resp, _ := testClient.Get(addr + "/kv/" + key)
 			if resp != nil {
-				io.Copy(io.Discard, resp.Body)
+				_, err := io.Copy(io.Discard, resp.Body)
+				if err != nil {
+					slog.Info("Error draining response")
+				}
 				resp.Body.Close()
 			}
 		}(i)
