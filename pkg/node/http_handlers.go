@@ -67,7 +67,7 @@ func (s *Node) Forward(w http.ResponseWriter, req *http.Request, owner string) {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	for k, vv := range resp.Header {
 		for _, v := range vv {
@@ -128,7 +128,7 @@ func (n *Node) Put(w http.ResponseWriter, req *http.Request) {
 					slog.Warn("error forwarding to replica", "err", err, "replica", repAddr)
 					return
 				}
-				resp.Body.Close()
+				_ = resp.Body.Close()
 			}
 		}(repAddr)
 	}
@@ -204,7 +204,7 @@ func (n *Node) Del(w http.ResponseWriter, req *http.Request) {
 					slog.Warn("error forwarding delete to replica", "err", err, "replica", repAddr)
 					return
 				}
-				resp.Body.Close()
+				_ = resp.Body.Close()
 			}
 		}(addr)
 	}

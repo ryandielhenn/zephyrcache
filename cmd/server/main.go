@@ -52,7 +52,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		defer cli.Close()
+		defer func() { _ = cli.Close() }()
 		defer node.BootstrapPeers(n, cli)()
 		node.WatchPeers(n, cli)
 	case "gossip":

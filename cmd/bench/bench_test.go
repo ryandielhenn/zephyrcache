@@ -87,8 +87,8 @@ func startNode(id, seedGossipAddr string) cacheNode {
 		gossipAddr: gossipAddr,
 		uconn:      uconn,
 		cleanup: func() {
-			srv.Close()
-			uconn.Close()
+			_ = srv.Close()
+			_ = uconn.Close()
 		},
 	}
 }
@@ -153,7 +153,7 @@ func BenchmarkPutGet(b *testing.B) {
 				if err != nil {
 					slog.Info("Error draining response")
 				}
-				resp.Body.Close()
+				_ = resp.Body.Close()
 			}
 		}(i)
 	}
