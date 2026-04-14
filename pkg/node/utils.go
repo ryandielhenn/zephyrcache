@@ -85,7 +85,7 @@ func parseTTL(req *http.Request) (time.Duration, error) {
 	return time.Duration(sec) * time.Second, nil
 }
 
-// Generate node config from user input
+// Generate node config from environment variables
 func Config() *NodeConfig {
 	id := os.Getenv("SELF_ID")
 	addr := os.Getenv("SELF_ADDR")
@@ -104,7 +104,7 @@ func Config() *NodeConfig {
 	}
 }
 
-// Generate node config from user input
+// Generate node config, manual passing of configs for tests/benchmarks
 func ConfigWithOpts(id, addr, gossipPort string, nReplicas, gossipQueueLen int) *NodeConfig {
 	return &NodeConfig{
 		maxGossipLen: gossipQueueLen,
