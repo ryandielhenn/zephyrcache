@@ -107,7 +107,6 @@ func main() {
 	if err := http.ListenAndServe(clientFacingAddr, clientMux); err != nil {
 		log.Fatal(err.Error())
 	}
-
 }
 
 func methodToOp(m string) string {
