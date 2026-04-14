@@ -47,11 +47,10 @@ func startNode(id, seedGossipAddr string) cacheNode {
 	}
 	gossipPort := strconv.Itoa(uconn.LocalAddr().(*net.UDPAddr).Port)
 	gossipAddr := uconn.LocalAddr().String()
-	os.Setenv("GOSSIP_PORT", gossipPort)
-	os.Setenv("SELF_ID", id)
-	os.Setenv("SELF_ADDR", httpAddr)
 
-	n := node.NewNode(node.Config())
+	config := node.ConfigWithOpts(id, httpAddr, gossipPort, *nReplicas, 50)
+
+	n := node.NewNode(config)
 	go node.StartGossipListener(n)
 	go node.StartGossipPinger(n,
 		node.WithPeriod(50*time.Millisecond),

@@ -103,3 +103,19 @@ func Config() *NodeConfig {
 		gossipPort:   gossipPort,
 	}
 }
+
+// Generate node config from user input
+func ConfigWithOpts(id, addr, gossipPort string, nReplicas, gossipQueueLen int) *NodeConfig {
+	replicationFactor, err := strconv.Atoi(os.Getenv("REPLICATION_FACTOR"))
+	if err != nil {
+		slog.Warn("REPLICATION_FACTOR should be an int, could not parse, defaulting to 3")
+		replicationFactor = 3
+	}
+	return &NodeConfig{
+		maxGossipLen: gossipQueueLen,
+		id:           id,
+		addr:         addr,
+		nReplicas:    replicationFactor,
+		gossipPort:   gossipPort,
+	}
+}

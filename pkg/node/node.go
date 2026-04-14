@@ -26,11 +26,11 @@ type Node struct {
 }
 
 type NodeConfig struct {
-	maxGossipLen int
 	id           string
 	addr         string
-	nReplicas    int
 	gossipPort   string
+	maxGossipLen int
+	nReplicas    int
 }
 
 func NewNode(config *NodeConfig) *Node {
