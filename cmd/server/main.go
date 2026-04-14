@@ -1,32 +1,20 @@
 package main
 
 import (
-	"cmp"
 	"log"
 	"log/slog"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/ryandielhenn/zephyrcache/internal/telemetry"
-	"github.com/ryandielhenn/zephyrcache/pkg/kv"
 	"github.com/ryandielhenn/zephyrcache/pkg/node"
-	"github.com/ryandielhenn/zephyrcache/pkg/ring"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 func main() {
-	// 1. Initialize this node with routing ring and key value store
-	store := kv.NewStore(64 << 20) // 64MB default cap for MVP
-	r := ring.New(128, ring.FNV32a)
-	id := os.Getenv("SELF_ID")
-	addr := os.Getenv("SELF_ADDR")
-	seedAddr := os.Getenv("SEED_ADDR")
-	etcdEndpoints := os.Getenv("ETCD_ENDPOINTS")
 	membershipService := os.Getenv("DISCOVERY")
-	gossipPort := cmp.Or(os.Getenv("GOSSIP_PORT"), "4000")
 	var level slog.Level
 	if lvl := os.Getenv("LOG_LEVEL"); lvl != "" {
 		err := level.UnmarshalText([]byte(lvl))
@@ -37,18 +25,12 @@ func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: level,
 	})))
-	replicationFactor, err := strconv.Atoi(os.Getenv("REPLICATION_FACTOR"))
-	if err != nil {
-		slog.Warn("REPLICATION_FACTOR should be an int, could not parse, defaulting to 3")
-		replicationFactor = 3
-	}
-
 	// 2. Connect to cluster
-	r.Add(id, addr)
-	n := node.NewNode(store, r, id, node.NormalizeHostPort(addr, "8080"), gossipPort, replicationFactor)
+	n := node.NewNode(node.Config())
 	switch membershipService {
 	case "etcd":
 		slog.Info("[Boot] creating etcd client")
+		etcdEndpoints := os.Getenv("ETCD_ENDPOINTS")
 		cli, err := clientv3.New(clientv3.Config{
 			Endpoints:   strings.Split(etcdEndpoints, ","),
 			DialTimeout: 5 * time.Second,
@@ -62,6 +44,7 @@ func main() {
 		node.WatchPeers(n, cli)
 	case "gossip":
 		go node.StartGossipListener(n)
+		seedAddr := os.Getenv("SEED_ADDR")
 		if seedAddr != "" {
 			n.ConnectToCluster(seedAddr, 200*time.Millisecond)
 		}
@@ -100,7 +83,7 @@ func main() {
 		})
 		clientFacingAddr := ":8080"
 		slog.Info("ZephyrCache node listening to clients on", "addr", clientFacingAddr)
-		if err := http.ListenAndServe(addr, clientMux); err != nil {
+		if err := http.ListenAndServe(clientFacingAddr, clientMux); err != nil {
 			log.Fatal(err.Error())
 		}
 

@@ -17,9 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ryandielhenn/zephyrcache/pkg/kv"
 	"github.com/ryandielhenn/zephyrcache/pkg/node"
-	"github.com/ryandielhenn/zephyrcache/pkg/ring"
 )
 
 var (
@@ -49,12 +47,11 @@ func startNode(id, seedGossipAddr string) cacheNode {
 	}
 	gossipPort := strconv.Itoa(uconn.LocalAddr().(*net.UDPAddr).Port)
 	gossipAddr := uconn.LocalAddr().String()
+	os.Setenv("GOSSIP_PORT", gossipPort)
+	os.Setenv("SELF_ID", id)
+	os.Setenv("SELF_ADDR", httpAddr)
 
-	store := kv.NewStore(64 << 20)
-	r := ring.New(128, ring.FNV32a)
-	r.Add(id, httpAddr)
-
-	n := node.NewNode(store, r, id, httpAddr, gossipPort, *nReplicas)
+	n := node.NewNode(node.Config())
 	go node.StartGossipListener(n)
 	go node.StartGossipPinger(n,
 		node.WithPeriod(50*time.Millisecond),

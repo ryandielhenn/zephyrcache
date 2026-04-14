@@ -1,10 +1,13 @@
 package node
 
 import (
+	"cmp"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -80,4 +83,23 @@ func parseTTL(req *http.Request) (time.Duration, error) {
 		return 0, fmt.Errorf("invalid ttl")
 	}
 	return time.Duration(sec) * time.Second, nil
+}
+
+// Generate node config from user input
+func Config() *NodeConfig {
+	id := os.Getenv("SELF_ID")
+	addr := os.Getenv("SELF_ADDR")
+	gossipPort := cmp.Or(os.Getenv("GOSSIP_PORT"), "4000")
+	replicationFactor, err := strconv.Atoi(os.Getenv("REPLICATION_FACTOR"))
+	if err != nil {
+		slog.Warn("REPLICATION_FACTOR should be an int, could not parse, defaulting to 3")
+		replicationFactor = 3
+	}
+	return &NodeConfig{
+		maxGossipLen: 50,
+		id:           id,
+		addr:         addr,
+		nReplicas:    replicationFactor,
+		gossipPort:   gossipPort,
+	}
 }

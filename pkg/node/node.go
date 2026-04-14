@@ -33,15 +33,10 @@ type NodeConfig struct {
 	gossipPort   string
 }
 
-func NewNode(store *kv.Store, r *ring.HashRing, id string, addr string, gossipPort string, replicationFactor int) *Node {
-	config := &NodeConfig{
-		maxGossipLen: 50,
-		id:           id,
-		addr:         addr,
-		gossipPort:   gossipPort,
-		nReplicas:    replicationFactor,
-	}
-
+func NewNode(config *NodeConfig) *Node {
+	store := kv.NewStore(64 << 20) // 64MB default cap for MVP
+	r := ring.New(128, ring.FNV32a)
+	r.Add(config.id, config.addr)
 	return &Node{
 		kv:          store,
 		ring:        r,
