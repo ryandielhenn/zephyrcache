@@ -35,20 +35,20 @@ func OverrideHostPort(addr, port string) string {
 }
 
 // ownerForKey looks up the owner for a key and normalizes the address of the owner
-func (s *Node) OwnerForKey(key string) (ownerHP, selfHP string, ok bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	ownerID := s.ring.Lookup([]byte(key)) // e.g. "Node3"
-	ownerAddr, ok := s.ring.Addr(ownerID) // e.g. "Node3:8080" (what you stored)
+func (n *Node) OwnerForKey(key string) (ownerHP, selfHP string, ok bool) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	ownerID := n.ring.Lookup([]byte(key)) // e.g. "Node3"
+	ownerAddr, ok := n.ring.Addr(ownerID) // e.g. "Node3:8080" (what you stored)
 	if !ok || ownerAddr == "" {
 		return "", "", false
 	}
-	return NormalizeHostPort(ownerAddr, "8080"), NormalizeHostPort(s.addr, "8080"), true
+	return NormalizeHostPort(ownerAddr, "8080"), NormalizeHostPort(n.config.addr, "8080"), true
 }
 
 // replicas looks up the replicas for a key and normalizes their addresses
 func (n *Node) ReplicasForKey(key string) (replicaAddrs []string) {
-	replicaIds := n.ring.LookupN([]byte(key), n.nReplicas) // e.g. "Node3"
+	replicaIds := n.ring.LookupN([]byte(key), n.config.nReplicas) // e.g. "Node3"
 
 	addrs := make([]string, len(replicaIds))
 	for i := range len(replicaIds) {

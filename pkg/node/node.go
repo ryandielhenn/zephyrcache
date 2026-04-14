@@ -14,33 +14,41 @@ import (
 )
 
 type Node struct {
-	kv           *kv.Store
-	ring         *ring.HashRing
-	gossipQueue  []*gossip.MessagePayload
+	kv          *kv.Store
+	ring        *ring.HashRing
+	gossipQueue []*gossip.MessagePayload
+	peers       map[string]peer.Peer
+	incarnation int
+	targetPeer  string
+	timeout     *time.Timer
+	mu          sync.Mutex
+	config      *NodeConfig
+}
+
+type NodeConfig struct {
 	maxGossipLen int
-	targetPeer   string
-	peers        map[string]peer.Peer
 	id           string
 	addr         string
 	nReplicas    int
-	incarnation  int
-	timeout      *time.Timer
 	gossipPort   string
-	mu           sync.Mutex
 }
 
 func NewNode(store *kv.Store, r *ring.HashRing, id string, addr string, gossipPort string, replicationFactor int) *Node {
-	return &Node{
-		kv:           store,
-		ring:         r,
-		gossipQueue:  make([]*gossip.MessagePayload, 0),
+	config := &NodeConfig{
 		maxGossipLen: 50,
-		peers:        make(map[string]peer.Peer),
 		id:           id,
 		addr:         addr,
-		incarnation:  0,
 		gossipPort:   gossipPort,
 		nReplicas:    replicationFactor,
+	}
+
+	return &Node{
+		kv:          store,
+		ring:        r,
+		gossipQueue: make([]*gossip.MessagePayload, 0),
+		peers:       make(map[string]peer.Peer),
+		incarnation: 0,
+		config:      config,
 	}
 }
 
@@ -63,7 +71,7 @@ func (n *Node) enqGossip(newMsg *gossip.MessagePayload) {
 			}
 		}
 	}
-	if len(newMsg.Peers) == 0 || len(n.gossipQueue) == n.maxGossipLen {
+	if len(newMsg.Peers) == 0 || len(n.gossipQueue) == n.config.maxGossipLen {
 		return
 	}
 	n.gossipQueue = append(n.gossipQueue, newMsg)

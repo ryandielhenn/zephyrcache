@@ -21,13 +21,13 @@ func (s *Node) Healthz(w http.ResponseWriter, _ *http.Request) {
 }
 
 // info writes a JSON payload with the process ID, current time, and KV item count.
-func (s *Node) Info(w http.ResponseWriter, _ *http.Request) {
+func (n *Node) Info(w http.ResponseWriter, _ *http.Request) {
 	type resp struct {
 		PID   int       `json:"pid"`
 		Now   time.Time `json:"now"`
 		Items int       `json:"items"`
 	}
-	data, _ := json.Marshal(resp{PID: os.Getpid(), Now: time.Now(), Items: s.kv.Len()})
+	data, _ := json.Marshal(resp{PID: os.Getpid(), Now: time.Now(), Items: n.kv.Len()})
 	w.Header().Set("Content-Type", "application/json")
 	_, err := w.Write(data)
 	if err != nil {
@@ -36,14 +36,14 @@ func (s *Node) Info(w http.ResponseWriter, _ *http.Request) {
 }
 
 // forward forwards a http request to the Node that owns the key
-func (s *Node) Forward(w http.ResponseWriter, req *http.Request, owner string) {
+func (n *Node) Forward(w http.ResponseWriter, req *http.Request, owner string) {
 	if owner == "" {
 		http.Error(w, "no owner for key", http.StatusServiceUnavailable)
 		return
 	}
 
 	hostport := NormalizeHostPort(owner, "8080")
-	if NormalizeHostPort(s.addr, "8080") == hostport {
+	if NormalizeHostPort(n.config.addr, "8080") == hostport {
 		// last-resort safety; shouldn’t happen if handler compare is correct
 		http.Error(w, "refusing to forward to self", http.StatusInternalServerError)
 		return
@@ -103,7 +103,7 @@ func (n *Node) Put(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	selfAddr := NormalizeHostPort(n.addr, "8080")
+	selfAddr := NormalizeHostPort(n.config.addr, "8080")
 	var wg sync.WaitGroup
 	for _, repAddr := range replicaAddrs {
 		wg.Add(1)
@@ -180,7 +180,7 @@ func (n *Node) Del(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	selfAddr := NormalizeHostPort(n.addr, "8080")
+	selfAddr := NormalizeHostPort(n.config.addr, "8080")
 	var wg sync.WaitGroup
 	for _, addr := range replicaAddrs {
 		wg.Add(1)

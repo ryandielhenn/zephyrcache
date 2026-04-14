@@ -8,7 +8,7 @@ import (
 // putReplica writes the key/value pair to the local store (called by the primary).
 func (n *Node) PutReplica(w http.ResponseWriter, req *http.Request) {
 	key := req.URL.Path[len("/replica/"):]
-	slog.Info("[Writing Replica]", "url", req.URL.Path, "self id", n.addr)
+	slog.Info("[Writing Replica]", "url", req.URL.Path, "self id", n.config.addr)
 
 	body, err := readBody(req)
 	if err != nil {
@@ -28,7 +28,7 @@ func (n *Node) PutReplica(w http.ResponseWriter, req *http.Request) {
 
 func (n *Node) DelReplica(w http.ResponseWriter, req *http.Request) {
 	key := req.URL.Path[len("/replica/"):]
-	slog.Info("[Deleting Replica]", "url", req.URL.Path, "self id", n.addr)
+	slog.Info("[Deleting Replica]", "url", req.URL.Path, "self id", n.config.addr)
 	n.kv.Delete(key)
 	w.WriteHeader(http.StatusNoContent)
 }

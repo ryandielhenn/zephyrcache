@@ -23,8 +23,9 @@ func BootstrapPeers(node *Node, cli *clientv3.Client) func() {
 		node.addPeer(nodeID, peerHP)
 	}
 
-	slog.Info("[Boot] registering, with etcd", "node.id", node.id, "node.addr", node.addr)
-	leaseId, cancel, err := discovery.RegisterNode(cli, node.id, node.addr, 10)
+	config := node.config
+	slog.Info("[Boot] registering, with etcd", "node.id", config.id, "node.addr", config.addr)
+	leaseId, cancel, err := discovery.RegisterNode(cli, config.id, config.addr, 10)
 	if err != nil {
 		log.Fatal(err)
 	}

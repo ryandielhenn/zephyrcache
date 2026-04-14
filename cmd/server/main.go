@@ -48,7 +48,6 @@ func main() {
 	n := node.NewNode(store, r, id, node.NormalizeHostPort(addr, "8080"), gossipPort, replicationFactor)
 	switch membershipService {
 	case "etcd":
-		// Create etcd client
 		slog.Info("[Boot] creating etcd client")
 		cli, err := clientv3.New(clientv3.Config{
 			Endpoints:   strings.Split(etcdEndpoints, ","),
@@ -77,28 +76,39 @@ func main() {
 		return
 	}
 
-	// 3. Wire up HTTP node endpoints
-	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", n.Healthz)
-	mux.HandleFunc("/info", n.Info)
-	mux.Handle("/metrics", telemetry.MetricsHandler())
-	mux.HandleFunc("/kv/", func(w http.ResponseWriter, req *http.Request) {
-		op := methodToOp(req.Method) // "get" | "put" | "post" | "delete" | "other"
-		telemetry.Instrument(op, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			slog.Info("Received HTTP KV Request", "type", r.Method)
-			switch r.Method {
-			case http.MethodPut, http.MethodPost:
-				n.Put(w, r)
-			case http.MethodGet:
-				n.Get(w, r)
-			case http.MethodDelete:
-				n.Del(w, r)
-			default:
-				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			}
-		})).ServeHTTP(w, req)
-	})
-	mux.HandleFunc("/replica/", func(w http.ResponseWriter, req *http.Request) {
+	// 3. Wire up client facing endpoints
+	go func() {
+		clientMux := http.NewServeMux()
+		clientMux.HandleFunc("/healthz", n.Healthz)
+		clientMux.HandleFunc("/info", n.Info)
+		clientMux.Handle("/metrics", telemetry.MetricsHandler())
+		clientMux.HandleFunc("/kv/", func(w http.ResponseWriter, req *http.Request) {
+			op := methodToOp(req.Method) // "get" | "put" | "post" | "delete" | "other"
+			telemetry.Instrument(op, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				slog.Info("Received HTTP KV Request", "type", r.Method)
+				switch r.Method {
+				case http.MethodPut, http.MethodPost:
+					n.Put(w, r)
+				case http.MethodGet:
+					n.Get(w, r)
+				case http.MethodDelete:
+					n.Del(w, r)
+				default:
+					http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				}
+			})).ServeHTTP(w, req)
+		})
+		clientFacingAddr := ":8080"
+		slog.Info("ZephyrCache node listening to clients on", "addr", clientFacingAddr)
+		if err := http.ListenAndServe(addr, clientMux); err != nil {
+			log.Fatal(err.Error())
+		}
+
+	}()
+
+	// 3. Wire up node facing endpoints
+	peerMux := http.NewServeMux()
+	peerMux.HandleFunc("/replica/", func(w http.ResponseWriter, req *http.Request) {
 		slog.Info("Received HTTP Replica Request", "type", req.Method)
 		switch req.Method {
 		case http.MethodPut, http.MethodPost:
@@ -110,9 +120,9 @@ func main() {
 		}
 	})
 
-	addr = ":8080"
-	slog.Info("ZephyrCache node listening on", "addr", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	peerFacingAddr := ":8081"
+	slog.Info("ZephyrCache node listening to peers on", "addr", peerFacingAddr)
+	if err := http.ListenAndServe(peerFacingAddr, peerMux); err != nil {
 		log.Fatal(err.Error())
 	}
 }
