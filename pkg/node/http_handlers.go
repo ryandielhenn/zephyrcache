@@ -1,12 +1,13 @@
 package node
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
-	"strconv"
+	"sync"
 	"time"
 )
 
@@ -66,7 +67,7 @@ func (s *Node) Forward(w http.ResponseWriter, req *http.Request, owner string) {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	for k, vv := range resp.Header {
 		for _, v := range vv {
@@ -80,38 +81,59 @@ func (s *Node) Forward(w http.ResponseWriter, req *http.Request, owner string) {
 	}
 }
 
-// put adds a key/value pair
+// put adds a key/value pair, writing to all replicas.
 func (n *Node) Put(w http.ResponseWriter, req *http.Request) {
 	key := req.URL.Path[len("/kv/"):]
-	owner, self, ok := n.OwnerForKey(key)
-	if !ok {
-		http.Error(w, "no owner for key", http.StatusServiceUnavailable)
-		return
-	}
 
-	if owner != self {
-		slog.Info("[Forward PUT]", "key", key, "owner", owner, "self", self)
-		n.Forward(w, req, owner)
-		return
-	}
-
-	// handle local case
-	val, err := io.ReadAll(req.Body)
-	if err != nil && err.Error() != "EOF" {
+	body, err := readBody(req)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	var ttl time.Duration
-	if ttlStr := req.URL.Query().Get("ttl"); ttlStr != "" {
-		sec, err := strconv.Atoi(ttlStr)
-		if err != nil {
-			http.Error(w, "invalid ttl", http.StatusBadRequest)
-			return
-		}
-		ttl = time.Duration(sec) * time.Second
+	ttl, err := parseTTL(req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
-	n.kv.Put(key, val, ttl)
+
+	replicaAddrs := n.ReplicasForKey(key)
+	if len(replicaAddrs) == 0 {
+		http.Error(w, "no owner or replicas for key", http.StatusServiceUnavailable)
+		return
+	}
+
+	selfAddr := NormalizeHostPort(n.addr, "8080")
+	var wg sync.WaitGroup
+	for _, repAddr := range replicaAddrs {
+		wg.Add(1)
+		go func(repAddr string) {
+			defer wg.Done()
+			if repAddr == selfAddr {
+				slog.Info("[Writing Replica]", "url", req.URL.Path, "self addr", selfAddr)
+				n.kv.Put(key, body, ttl)
+			} else {
+				slog.Info("[Forward PUT]", "key", key, "replica", repAddr, "self", selfAddr)
+				replicaURL := "http://" + repAddr + "/replica/" + key
+				if q := req.URL.RawQuery; q != "" {
+					replicaURL += "?" + q
+				}
+				repReq, err := http.NewRequestWithContext(req.Context(), http.MethodPut, replicaURL, bytes.NewReader(body))
+				if err != nil {
+					slog.Warn("error building replication request", "err", err)
+					return
+				}
+				resp, err := http.DefaultClient.Do(repReq)
+				if err != nil {
+					slog.Warn("error forwarding to replica", "err", err, "replica", repAddr)
+					return
+				}
+				_ = resp.Body.Close()
+			}
+		}(repAddr)
+	}
+
+	wg.Wait()
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -146,19 +168,46 @@ func (n *Node) Get(w http.ResponseWriter, req *http.Request) {
 // del removes a key
 func (n *Node) Del(w http.ResponseWriter, req *http.Request) {
 	key := req.URL.Path[len("/kv/"):]
-	owner, self, ok := n.OwnerForKey(key)
-	if !ok {
-		http.Error(w, "no owner for key", http.StatusServiceUnavailable)
+	replicaAddrs := n.ReplicasForKey(key)
+	if len(replicaAddrs) == 0 {
+		http.Error(w, "no owner or replicas for key", http.StatusServiceUnavailable)
 		return
 	}
 
-	if owner != self {
-		slog.Info("[Forward DEL]", "key", key, "owner", owner, "self", self)
-		n.Forward(w, req, owner)
+	body, err := readBody(req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// handle local case
-	n.kv.Delete(key)
+	selfAddr := NormalizeHostPort(n.addr, "8080")
+	var wg sync.WaitGroup
+	for _, addr := range replicaAddrs {
+		wg.Add(1)
+		go func(repAddr string) {
+			defer wg.Done()
+			if repAddr == selfAddr {
+				// handle local case
+				slog.Info("[Deleting Replica]", "url", req.URL.Path, "self addr", selfAddr)
+				n.kv.Delete(key)
+			} else {
+				slog.Info("[Forward DEL]", "key", key, "replica", repAddr, "self", selfAddr)
+				replicaURL := "http://" + repAddr + "/replica/" + key
+
+				repReq, err := http.NewRequestWithContext(req.Context(), http.MethodDelete, replicaURL, bytes.NewReader(body))
+				if err != nil {
+					slog.Warn("error building delete replica request", "err", err)
+					return
+				}
+				resp, err := http.DefaultClient.Do(repReq)
+				if err != nil {
+					slog.Warn("error forwarding delete to replica", "err", err, "replica", repAddr)
+					return
+				}
+				_ = resp.Body.Close()
+			}
+		}(addr)
+	}
+	wg.Wait()
 	w.WriteHeader(http.StatusNoContent)
 }

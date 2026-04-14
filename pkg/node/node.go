@@ -22,13 +22,14 @@ type Node struct {
 	peers        map[string]peer.Peer
 	id           string
 	addr         string
+	nReplicas    int
 	incarnation  int
 	timeout      *time.Timer
 	gossipPort   string
 	mu           sync.Mutex
 }
 
-func NewNode(store *kv.Store, r *ring.HashRing, id string, addr string, gossipPort string) *Node {
+func NewNode(store *kv.Store, r *ring.HashRing, id string, addr string, gossipPort string, replicationFactor int) *Node {
 	return &Node{
 		kv:           store,
 		ring:         r,
@@ -39,6 +40,7 @@ func NewNode(store *kv.Store, r *ring.HashRing, id string, addr string, gossipPo
 		addr:         addr,
 		incarnation:  0,
 		gossipPort:   gossipPort,
+		nReplicas:    replicationFactor,
 	}
 }
 

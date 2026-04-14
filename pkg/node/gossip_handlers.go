@@ -239,7 +239,7 @@ func (n *Node) sendGossip(msg *gossip.Message, addr string) {
 	if err != nil {
 		return
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	_, err = conn.Write(data)
 	if err != nil {
@@ -296,7 +296,7 @@ func StartGossipListener(node *Node) {
 	if err != nil {
 		return
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	buffer := make([]byte, 1024)
 	for {

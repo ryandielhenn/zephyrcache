@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -36,10 +37,15 @@ func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: level,
 	})))
+	replicationFactor, err := strconv.Atoi(os.Getenv("REPLICATION_FACTOR"))
+	if err != nil {
+		slog.Warn("REPLICATION_FACTOR should be an int, could not parse, defaulting to 3")
+		replicationFactor = 3
+	}
 
 	// 2. Connect to cluster
 	r.Add(id, addr)
-	n := node.NewNode(store, r, id, node.NormalizeHostPort(addr, "8080"), gossipPort)
+	n := node.NewNode(store, r, id, node.NormalizeHostPort(addr, "8080"), gossipPort, replicationFactor)
 	switch membershipService {
 	case "etcd":
 		// Create etcd client
@@ -52,7 +58,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		defer cli.Close()
+		defer func() { _ = cli.Close() }()
 		defer node.BootstrapPeers(n, cli)()
 		node.WatchPeers(n, cli)
 	case "gossip":
@@ -79,7 +85,7 @@ func main() {
 	mux.HandleFunc("/kv/", func(w http.ResponseWriter, req *http.Request) {
 		op := methodToOp(req.Method) // "get" | "put" | "post" | "delete" | "other"
 		telemetry.Instrument(op, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			slog.Info("Received HTTP Request")
+			slog.Info("Received HTTP KV Request", "type", r.Method)
 			switch r.Method {
 			case http.MethodPut, http.MethodPost:
 				n.Put(w, r)
@@ -91,6 +97,17 @@ func main() {
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			}
 		})).ServeHTTP(w, req)
+	})
+	mux.HandleFunc("/replica/", func(w http.ResponseWriter, req *http.Request) {
+		slog.Info("Received HTTP Replica Request", "type", req.Method)
+		switch req.Method {
+		case http.MethodPut, http.MethodPost:
+			n.PutReplica(w, req)
+		case http.MethodDelete:
+			n.DelReplica(w, req)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
 	})
 
 	addr = ":8080"

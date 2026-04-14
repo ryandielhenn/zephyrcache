@@ -6,7 +6,9 @@ services:
       dockerfile: Dockerfile
     environment:
       - DISCOVERY=gossip
-      - LOG_LEVEL=warn
+      - SELF_ID=seed
+      - SELF_ADDR=seed
+      - LOG_LEVEL=info
     ports:
       - "8080:8080"
     deploy:
