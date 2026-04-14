@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -36,10 +37,15 @@ func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: level,
 	})))
+	replicationFactor, err := strconv.Atoi(os.Getenv("REPLICATION_FACTOR"))
+	if err != nil {
+		slog.Warn("REPLICATION_FACTOR should be an int, could not parse, defaulting to 3")
+		replicationFactor = 3
+	}
 
 	// 2. Connect to cluster
 	r.Add(id, addr)
-	n := node.NewNode(store, r, id, node.NormalizeHostPort(addr, "8080"), gossipPort)
+	n := node.NewNode(store, r, id, node.NormalizeHostPort(addr, "8080"), gossipPort, replicationFactor)
 	switch membershipService {
 	case "etcd":
 		// Create etcd client

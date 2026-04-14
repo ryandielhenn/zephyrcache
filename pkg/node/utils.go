@@ -47,8 +47,8 @@ func (s *Node) OwnerForKey(key string) (ownerHP, selfHP string, ok bool) {
 }
 
 // replicas looks up the replicas for a key and normalizes their addresses
-func (n *Node) ReplicasForKey(key string, replicas int) (replicaAddrs []string) {
-	replicaIds := n.ring.LookupN([]byte(key), replicas) // e.g. "Node3"
+func (n *Node) ReplicasForKey(key string) (replicaAddrs []string) {
+	replicaIds := n.ring.LookupN([]byte(key), n.nReplicas) // e.g. "Node3"
 
 	addrs := make([]string, len(replicaIds))
 	for i := range len(replicaIds) {

@@ -23,9 +23,10 @@ import (
 )
 
 var (
-	numNodes = flag.Int("nodes", 3, "number of cache nodes to spin up")
-	conc     = flag.Int("c", 32, "concurrency")
-	valSize  = flag.Int("val", 128, "value size in bytes")
+	numNodes  = flag.Int("n", 3, "number of cache nodes to spin up")
+	conc      = flag.Int("c", 32, "concurrency")
+	valSize   = flag.Int("b", 128, "value size in bytes")
+	nReplicas = flag.Int("r", 3, "Replication Factor")
 )
 
 type cacheNode struct {
@@ -53,7 +54,7 @@ func startNode(id, seedGossipAddr string) cacheNode {
 	r := ring.New(128, ring.FNV32a)
 	r.Add(id, httpAddr)
 
-	n := node.NewNode(store, r, id, httpAddr, gossipPort)
+	n := node.NewNode(store, r, id, httpAddr, gossipPort, *nReplicas)
 	go node.StartGossipListener(n)
 	go node.StartGossipPinger(n,
 		node.WithPeriod(50*time.Millisecond),

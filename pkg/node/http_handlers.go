@@ -97,7 +97,7 @@ func (n *Node) Put(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	replicaAddrs := n.ReplicasForKey(key, 3)
+	replicaAddrs := n.ReplicasForKey(key)
 	if len(replicaAddrs) == 0 {
 		http.Error(w, "no owner or replicas for key", http.StatusServiceUnavailable)
 		return
@@ -168,7 +168,7 @@ func (n *Node) Get(w http.ResponseWriter, req *http.Request) {
 // del removes a key
 func (n *Node) Del(w http.ResponseWriter, req *http.Request) {
 	key := req.URL.Path[len("/kv/"):]
-	replicaAddrs := n.ReplicasForKey(key, 3)
+	replicaAddrs := n.ReplicasForKey(key)
 	if len(replicaAddrs) == 0 {
 		http.Error(w, "no owner or replicas for key", http.StatusServiceUnavailable)
 		return
