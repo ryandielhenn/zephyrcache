@@ -4,11 +4,32 @@ import (
 	"context"
 	"log"
 	"log/slog"
+	"os"
 	"strings"
+	"time"
 
 	discovery "github.com/ryandielhenn/zephyrcache/pkg/registry"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
+
+func (n *Node) JoinEtcd() func() {
+	slog.Info("[Boot] creating etcd client")
+	etcdEndpoints := os.Getenv("ETCD_ENDPOINTS")
+	cli, err := clientv3.New(clientv3.Config{
+		Endpoints:   strings.Split(etcdEndpoints, ","),
+		DialTimeout: 5 * time.Second,
+	})
+	slog.Info("[Boot] created etcd client with", "endpoints", cli.Endpoints())
+	if err != nil {
+		log.Fatal(err)
+	}
+	bootstrapCleanup := BootstrapPeers(n, cli)
+	WatchPeers(n, cli)
+	return func() {
+		bootstrapCleanup()
+		_ = cli.Close()
+	}
+}
 
 func BootstrapPeers(node *Node, cli *clientv3.Client) func() {
 	// Bootstrap peers into this ring
