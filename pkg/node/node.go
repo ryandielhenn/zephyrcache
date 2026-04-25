@@ -1,9 +1,11 @@
 package node
 
 import (
+	"crypto/tls"
 	"log/slog"
 	"math"
 	"math/rand"
+	"net/http"
 	"sync"
 	"time"
 
@@ -14,15 +16,17 @@ import (
 )
 
 type Node struct {
-	kv          *kv.Store
-	ring        *ring.HashRing
-	gossipQueue []*gossip.MessagePayload
-	peers       map[string]peer.Peer
-	incarnation int
-	targetPeer  string
-	timeout     *time.Timer
-	mu          sync.Mutex
-	config      *NodeConfig
+	kv            *kv.Store
+	ring          *ring.HashRing
+	gossipQueue   []*gossip.MessagePayload
+	peers         map[string]peer.Peer
+	incarnation   int
+	targetPeer    string
+	timeout       *time.Timer
+	mu            sync.Mutex
+	config        *NodeConfig
+	serverTLS     *tls.Config
+	replicaClient *http.Client
 }
 
 type NodeConfig struct {
@@ -38,13 +42,36 @@ func NewNode(config *NodeConfig) *Node {
 	r := ring.New(128, ring.FNV32a)
 	r.Add(config.id, config.addr)
 	return &Node{
-		kv:          store,
-		ring:        r,
-		gossipQueue: make([]*gossip.MessagePayload, 0),
-		peers:       make(map[string]peer.Peer),
-		incarnation: 0,
-		config:      config,
+		kv:            store,
+		ring:          r,
+		gossipQueue:   make([]*gossip.MessagePayload, 0),
+		peers:         make(map[string]peer.Peer),
+		incarnation:   0,
+		config:        config,
+		replicaClient: http.DefaultClient,
 	}
+}
+
+// SetReplicaTLS configures mutual TLS for the replication endpoint.
+// serverTLS is used by the replication HTTPS server; clientTLS is used
+// when this node calls replicas.
+func (n *Node) SetReplicaTLS(serverTLS, clientTLS *tls.Config) {
+	n.serverTLS = serverTLS
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.TLSClientConfig = clientTLS
+	n.replicaClient = &http.Client{Transport: t}
+}
+
+// ServerTLSConfig returns the TLS config for the replication server,
+// or nil when TLS is not configured.
+func (n *Node) ServerTLSConfig() *tls.Config {
+	return n.serverTLS
+}
+
+// LocalGet reads a key directly from this node's local KV store,
+// bypassing ring-based forwarding. Intended for testing replica state.
+func (n *Node) LocalGet(key string) ([]byte, bool) {
+	return n.kv.Get(key)
 }
 
 func (n *Node) enqGossip(newMsg *gossip.MessagePayload) {

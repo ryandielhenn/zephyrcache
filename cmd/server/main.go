@@ -26,6 +26,9 @@ func main() {
 	})))
 	// 2. Connect to cluster
 	n := node.NewNode(node.Config())
+	if err := node.ConfigureTLS(n); err != nil {
+		log.Fatal(err)
+	}
 	switch membershipService {
 	case "etcd":
 		cleanup := n.JoinEtcd()
@@ -61,10 +64,18 @@ func main() {
 				}
 			})
 
-		peerFacingAddr := ":8081"
+		peerFacingAddr := ":443"
 		slog.Info("ZephyrCache node listening to peers on", "addr", peerFacingAddr)
-		if err := http.ListenAndServe(peerFacingAddr, peerMux); err != nil {
-			log.Fatal(err.Error())
+
+		srv := &http.Server{
+			Addr:      peerFacingAddr,
+			Handler:   peerMux,
+			TLSConfig: n.ServerTLSConfig(),
+		}
+		if n.ServerTLSConfig() != nil {
+			log.Fatal(srv.ListenAndServeTLS("", ""))
+		} else {
+			log.Fatal(srv.ListenAndServe())
 		}
 	}()
 
@@ -94,6 +105,7 @@ func main() {
 	clientFacingAddr := ":8080"
 	slog.Info("ZephyrCache node listening to clients on", "addr", clientFacingAddr)
 	if err := http.ListenAndServe(clientFacingAddr, clientMux); err != nil {
-		log.Fatal(err.Error())
+		slog.Error("ZephyrCache client api error", "err", err)
+
 	}
 }

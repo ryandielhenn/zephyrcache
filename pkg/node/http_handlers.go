@@ -35,6 +35,13 @@ func (n *Node) Info(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
+func (n *Node) replicaScheme() string {
+	if n.serverTLS != nil {
+		return "https"
+	}
+	return "http"
+}
+
 // forward forwards a http request to the Node that owns the key
 func (n *Node) Forward(w http.ResponseWriter, req *http.Request, owner string) {
 	if owner == "" {
@@ -49,7 +56,7 @@ func (n *Node) Forward(w http.ResponseWriter, req *http.Request, owner string) {
 		return
 	}
 	target := *req.URL
-	target.Scheme = "http"
+	target.Scheme = n.replicaScheme()
 	target.Host = hostport
 
 	out, err := http.NewRequestWithContext(req.Context(), req.Method, target.String(), req.Body)
@@ -62,7 +69,7 @@ func (n *Node) Forward(w http.ResponseWriter, req *http.Request, owner string) {
 
 	out.Header.Set("X-Forwarded-For", req.RemoteAddr)
 
-	resp, err := http.DefaultClient.Do(out)
+	resp, err := n.replicaClient.Do(out)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
@@ -114,7 +121,7 @@ func (n *Node) Put(w http.ResponseWriter, req *http.Request) {
 				n.kv.Put(key, body, ttl)
 			} else {
 				slog.Info("[Forward PUT]", "key", key, "replica", repAddr, "self", selfAddr)
-				replicaURL := "http://" + repAddr + "/replica/" + key
+				replicaURL := n.replicaScheme() + "://" + repAddr + "/replica/" + key
 				if q := req.URL.RawQuery; q != "" {
 					replicaURL += "?" + q
 				}
@@ -123,7 +130,7 @@ func (n *Node) Put(w http.ResponseWriter, req *http.Request) {
 					slog.Warn("error building replication request", "err", err)
 					return
 				}
-				resp, err := http.DefaultClient.Do(repReq)
+				resp, err := n.replicaClient.Do(repReq)
 				if err != nil {
 					slog.Warn("error forwarding to replica", "err", err, "replica", repAddr)
 					return
@@ -192,14 +199,14 @@ func (n *Node) Del(w http.ResponseWriter, req *http.Request) {
 				n.kv.Delete(key)
 			} else {
 				slog.Info("[Forward DEL]", "key", key, "replica", repAddr, "self", selfAddr)
-				replicaURL := "http://" + repAddr + "/replica/" + key
+				replicaURL := n.replicaScheme() + "://" + repAddr + "/replica/" + key
 
 				repReq, err := http.NewRequestWithContext(req.Context(), http.MethodDelete, replicaURL, bytes.NewReader(body))
 				if err != nil {
 					slog.Warn("error building delete replica request", "err", err)
 					return
 				}
-				resp, err := http.DefaultClient.Do(repReq)
+				resp, err := n.replicaClient.Do(repReq)
 				if err != nil {
 					slog.Warn("error forwarding delete to replica", "err", err, "replica", repAddr)
 					return
