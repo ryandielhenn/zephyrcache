@@ -2,7 +2,7 @@ package peer
 
 type Peer struct {
 	Addr        string     `json:"addr"`
-	GossipAddr  string     `json:"gossip_addr,omitempty"`
+	GossipAddr  string     `json:"gossip_addr"`
 	Status      PeerStatus `json:"status"`
 	Incarnation int        `json:"incarnation"`
 }

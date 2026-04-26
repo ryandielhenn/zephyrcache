@@ -89,7 +89,7 @@ func parseTTL(req *http.Request) (time.Duration, error) {
 func Config() *NodeConfig {
 	id := os.Getenv("SELF_ID")
 	addr := os.Getenv("SELF_ADDR")
-	gossipPort := cmp.Or(os.Getenv("GOSSIP_PORT"), "4000")
+	gossipPort := cmp.Or(os.Getenv("GOSSIP_PORT"), GOSSIP_PORT_DEFAULT)
 	replicationFactor, err := strconv.Atoi(os.Getenv("REPLICATION_FACTOR"))
 	if err != nil {
 		slog.Warn("REPLICATION_FACTOR should be an int, could not parse, defaulting to 3")
