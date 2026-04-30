@@ -14,6 +14,7 @@ import (
 )
 
 const GOSSIP_PORT_DEFAULT string = "4000"
+const PEER_PORT_DEFAULT string = "443"
 
 func (n *Node) handleGossip(msg *gossip.Message) {
 	if msg == nil {
@@ -239,6 +240,7 @@ func (n *Node) selfGossipAddr() string {
 func (n *Node) sendGossip(msg *gossip.Message, addr string) {
 	data, err := json.Marshal(msg)
 	if err != nil {
+		slog.Error("sendGossip marshal failed", "addr", addr, "err", err)
 		return
 	}
 
@@ -246,6 +248,7 @@ func (n *Node) sendGossip(msg *gossip.Message, addr string) {
 	if !ok {
 		udpAddr, err := net.ResolveUDPAddr("udp", addr)
 		if err != nil {
+			slog.Error("sendGossip resolve failed", "addr", addr, "err", err)
 			return
 		}
 
@@ -257,6 +260,7 @@ func (n *Node) sendGossip(msg *gossip.Message, addr string) {
 				dtls.WithRootCAs(n.serverTLS.ClientCAs),
 			)
 			if err != nil {
+				slog.Error("sendGossip dial (mTLS) failed", "addr", addr, "err", err)
 				return
 			}
 			conn = secureConn
@@ -268,9 +272,11 @@ func (n *Node) sendGossip(msg *gossip.Message, addr string) {
 				dtls.WithPSK(func(hint []byte) ([]byte, error) {
 					return []byte("secret-key"), nil
 				}),
+				dtls.WithPSKIdentityHint([]byte("zephyr")),
 				dtls.WithCipherSuites(dtls.TLS_PSK_WITH_AES_128_CCM),
 			)
 			if err != nil {
+				slog.Error("sendGossip dial (PSK) failed", "addr", addr, "err", err)
 				return
 			}
 			conn = insecureConn
@@ -281,6 +287,7 @@ func (n *Node) sendGossip(msg *gossip.Message, addr string) {
 
 	_, err = conn.Write(data)
 	if err != nil {
+		slog.Error("sendGossip write failed", "addr", addr, "err", err)
 		delete(n.dtlsConns, addr)
 		_ = conn.Close()
 		return
@@ -354,9 +361,11 @@ func StartGossipListener(ctx context.Context, node *Node) {
 			dtls.WithPSK(func(hint []byte) ([]byte, error) {
 				return []byte("secret-key"), nil
 			}),
+			dtls.WithPSKIdentityHint([]byte("zephyr")),
 			dtls.WithCipherSuites(dtls.TLS_PSK_WITH_AES_128_CCM),
 		)
 		if err != nil {
+			slog.Error("gossip listener (PSK) failed", "err", err)
 			return
 		}
 		ln = insecureLn
@@ -374,6 +383,7 @@ func StartGossipListener(ctx context.Context, node *Node) {
 			case <-ctx.Done():
 				return
 			default:
+				slog.Error("gossip listener accept failed", "err", err)
 				continue
 			}
 		}

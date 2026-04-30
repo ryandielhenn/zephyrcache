@@ -49,8 +49,8 @@ func (n *Node) Forward(w http.ResponseWriter, req *http.Request, owner string) {
 		return
 	}
 
-	hostport := NormalizeHostPort(owner, "8080")
-	if NormalizeHostPort(n.config.addr, "8080") == hostport {
+	hostport := NormalizeHostPort(owner, PEER_PORT_DEFAULT)
+	if NormalizeHostPort(n.config.addr, PEER_PORT_DEFAULT) == hostport {
 		// last-resort safety; shouldn’t happen if handler compare is correct
 		http.Error(w, "refusing to forward to self", http.StatusInternalServerError)
 		return
@@ -110,7 +110,7 @@ func (n *Node) Put(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	selfAddr := NormalizeHostPort(n.config.addr, "8080")
+	selfAddr := NormalizeHostPort(n.config.addr, PEER_PORT_DEFAULT)
 	var wg sync.WaitGroup
 	for _, repAddr := range replicaAddrs {
 		wg.Add(1)
@@ -187,7 +187,7 @@ func (n *Node) Del(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	selfAddr := NormalizeHostPort(n.config.addr, "8080")
+	selfAddr := NormalizeHostPort(n.config.addr, PEER_PORT_DEFAULT)
 	var wg sync.WaitGroup
 	for _, addr := range replicaAddrs {
 		wg.Add(1)

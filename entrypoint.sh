@@ -9,9 +9,10 @@ if [ -z "$SELF_ID" ]; then
     export SELF_ID="$CONTAINER_HOSTNAME"
 fi
 
-# Set SELF_ADDR if not already set
+# Set SELF_ADDR if not already set. Points at the peer port (:443) where
+# /replica/ and inter-node /kv/ are served — clients still reach /kv/ on :8080.
 if [ -z "$SELF_ADDR" ]; then
-    export SELF_ADDR="http://$CONTAINER_HOSTNAME:8080"
+    export SELF_ADDR="$CONTAINER_HOSTNAME:443"
 fi
 
 echo "Starting node with:"

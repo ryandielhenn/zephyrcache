@@ -72,6 +72,21 @@ func main() {
 					http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 				}
 			})
+		// /kv/ also lives on the peer mux so inter-node forwards reuse the
+		// same (optionally TLS) channel as /replica/.
+		peerMux.HandleFunc("/kv/",
+			func(w http.ResponseWriter, req *http.Request) {
+				switch req.Method {
+				case http.MethodPut, http.MethodPost:
+					n.Put(w, req)
+				case http.MethodGet:
+					n.Get(w, req)
+				case http.MethodDelete:
+					n.Del(w, req)
+				default:
+					http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				}
+			})
 
 		peerFacingAddr := ":443"
 		slog.Info("ZephyrCache node listening to peers on", "addr", peerFacingAddr)

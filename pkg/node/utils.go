@@ -30,6 +30,12 @@ func NormalizeHostPort(addr, defPort string) string {
 }
 
 func OverrideHostPort(addr, port string) string {
+	if rest, ok := strings.CutPrefix(addr, "http://"); ok {
+		addr = rest
+	} else if rest, ok := strings.CutPrefix(addr, "https://"); ok {
+		addr = rest
+	}
+
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		return addr + ":" + port
@@ -46,7 +52,7 @@ func (n *Node) OwnerForKey(key string) (ownerHP, selfHP string, ok bool) {
 	if !ok || ownerAddr == "" {
 		return "", "", false
 	}
-	return NormalizeHostPort(ownerAddr, "8080"), NormalizeHostPort(n.config.addr, "8080"), true
+	return NormalizeHostPort(ownerAddr, PEER_PORT_DEFAULT), NormalizeHostPort(n.config.addr, PEER_PORT_DEFAULT), true
 }
 
 // replicas looks up the replicas for a key and normalizes their addresses
@@ -59,7 +65,7 @@ func (n *Node) ReplicasForKey(key string) (replicaAddrs []string) {
 		if !ok || addr == "" {
 			return nil
 		}
-		addrs[i] = NormalizeHostPort(addr, "8080")
+		addrs[i] = NormalizeHostPort(addr, PEER_PORT_DEFAULT)
 
 	}
 	return addrs
