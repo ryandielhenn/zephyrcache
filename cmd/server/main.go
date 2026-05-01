@@ -60,33 +60,10 @@ func main() {
 	// 3. Wire up node facing endpoints
 	go func() {
 		peerMux := http.NewServeMux()
-		peerMux.HandleFunc("/replica/",
-			func(w http.ResponseWriter, req *http.Request) {
-				slog.Info("Received HTTP Replica Request", "type", req.Method)
-				switch req.Method {
-				case http.MethodPut, http.MethodPost:
-					n.PutReplica(w, req)
-				case http.MethodDelete:
-					n.DelReplica(w, req)
-				default:
-					http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-				}
-			})
+		peerMux.HandleFunc("/replica/", n.ReplicaEventCallback())
 		// /kv/ also lives on the peer mux so inter-node forwards reuse the
 		// same (optionally TLS) channel as /replica/.
-		peerMux.HandleFunc("/kv/",
-			func(w http.ResponseWriter, req *http.Request) {
-				switch req.Method {
-				case http.MethodPut, http.MethodPost:
-					n.Put(w, req)
-				case http.MethodGet:
-					n.Get(w, req)
-				case http.MethodDelete:
-					n.Del(w, req)
-				default:
-					http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-				}
-			})
+		peerMux.HandleFunc("/kv/", n.KvEventCallback())
 
 		peerFacingAddr := ":443"
 		slog.Info("ZephyrCache node listening to peers on", "addr", peerFacingAddr)
@@ -111,20 +88,7 @@ func main() {
 	clientMux.HandleFunc("/kv/",
 		func(w http.ResponseWriter, req *http.Request) {
 			op := strings.ToLower(req.Method)
-			telemetry.Instrument(op, http.HandlerFunc(
-				func(w http.ResponseWriter, r *http.Request) {
-					slog.Info("Received HTTP KV Request", "type", r.Method)
-					switch r.Method {
-					case http.MethodPut, http.MethodPost:
-						n.Put(w, r)
-					case http.MethodGet:
-						n.Get(w, r)
-					case http.MethodDelete:
-						n.Del(w, r)
-					default:
-						http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-					}
-				})).ServeHTTP(w, req)
+			telemetry.Instrument(op, http.HandlerFunc(n.KvEventCallback())).ServeHTTP(w, req)
 		})
 	clientFacingAddr := ":8080"
 	slog.Info("ZephyrCache node listening to clients on", "addr", clientFacingAddr)

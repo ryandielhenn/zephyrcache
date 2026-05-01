@@ -56,6 +56,36 @@ func NewNode(config *NodeConfig) *Node {
 	}
 }
 
+func (n *Node) KvEventCallback() func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		slog.Info("Received HTTP KV Request", "type", r.Method)
+		switch r.Method {
+		case http.MethodPut, http.MethodPost:
+			n.Put(w, r)
+		case http.MethodGet:
+			n.Get(w, r)
+		case http.MethodDelete:
+			n.Del(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	}
+}
+
+func (n *Node) ReplicaEventCallback() func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, req *http.Request) {
+		slog.Info("Received HTTP Replica Request", "type", req.Method)
+		switch req.Method {
+		case http.MethodPut, http.MethodPost:
+			n.PutReplica(w, req)
+		case http.MethodDelete:
+			n.DelReplica(w, req)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	}
+}
+
 // SetReplicaTLS configures mutual TLS for the replication endpoint.
 // serverTLS is used by the replication HTTPS server; clientTLS is used
 // when this node calls replicas.
