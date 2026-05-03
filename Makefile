@@ -17,7 +17,7 @@ COMPOSE   := docker compose -p $(PROJECT) -f deploy/docker-compose.yml -f deploy
 ifeq ($(TLS),1)
 COMPOSE   += -f deploy/docker-compose.tls.yml
 endif
-ALL := docker compose -p $(PROJECT) -f deploy/monitoring/docker-compose.yml -f deploy/docker-compose.yml -f deploy/docker-compose.etcd.yml -f deploy/docker-compose.gossip.yml -f deploy/docker-compose.tls.yml
+ALL := docker compose -p $(PROJECT) -f deploy/docker-compose.yml -f deploy/docker-compose.etcd.yml -f deploy/docker-compose.gossip.yml -f deploy/docker-compose.tls.yml
 
 # Extra SANs on the cluster cert. Internal peer traffic pins ServerName to
 # zephyr-cluster (auto-added by GenerateNodeCert), so these are only needed for
@@ -43,6 +43,8 @@ certs:
 ## monitor: bring up prometheus + grafana attached to the cluster network
 monitor:
 	docker compose -p $(PROJECT) -f deploy/monitoring/docker-compose.yml up -d
+monitor-down:
+	docker compose -p $(PROJECT) -f deploy/monitoring/docker-compose.yml down
 
 ## down: stop and remove containers
 down:

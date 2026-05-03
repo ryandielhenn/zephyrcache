@@ -4,6 +4,7 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
+      network: host
     environment:
       - DISCOVERY=gossip
       - SELF_ID=seed
