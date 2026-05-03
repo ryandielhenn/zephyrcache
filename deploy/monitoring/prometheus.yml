@@ -2,6 +2,15 @@ global:
   scrape_interval: 15s
 
 scrape_configs:
-  - job_name: "zephyrcache"
+  - job_name: "zephyrcache-seed"
     static_configs:
-      - targets: ["host.docker.internal:8080"]   # service name if in same compose network
+      - targets: ["seed:8080"]
+
+  # The compose service `node` is scaled, so Docker's embedded DNS returns
+  # multiple A records for it. Prometheus's dns_sd resolves all of them and
+  # creates one target per replica — auto-scales with `make up NODES=N`.
+  - job_name: "zephyrcache-nodes"
+    dns_sd_configs:
+      - names: ["node"]
+        type: A
+        port: 8080

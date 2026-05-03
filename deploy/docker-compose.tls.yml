@@ -1,0 +1,16 @@
+services:
+  seed:
+    volumes:
+      - ../certs:/certs:ro
+    environment:
+      - REPLICA_CA_FILE=/certs/ca.crt
+      - REPLICA_CERT_FILE=/certs/cluster.crt
+      - REPLICA_KEY_FILE=/certs/cluster.key
+
+  node:
+    volumes:
+      - ../certs:/certs:ro
+    environment:
+      - REPLICA_CA_FILE=/certs/ca.crt
+      - REPLICA_CERT_FILE=/certs/cluster.crt
+      - REPLICA_KEY_FILE=/certs/cluster.key

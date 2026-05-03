@@ -11,19 +11,34 @@
 
 DISCOVERY ?= gossip
 NODES     ?= 3
+TLS       ?= 0
 PROJECT   := zephyr
 COMPOSE   := docker compose -p $(PROJECT) -f deploy/docker-compose.yml -f deploy/docker-compose.$(DISCOVERY).yml
-ALL := docker compose -p $(PROJECT) -f deploy/docker-compose.yml -f deploy/docker-compose.etcd.yml -f deploy/docker-compose.gossip.yml
+ifeq ($(TLS),1)
+COMPOSE   += -f deploy/docker-compose.tls.yml
+endif
+ALL := docker compose -p $(PROJECT) -f deploy/docker-compose.yml -f deploy/docker-compose.etcd.yml -f deploy/docker-compose.gossip.yml -f deploy/docker-compose.tls.yml
 
-.PHONY: up down restart build logs status clean ps
+# Extra SANs on the cluster cert. Internal peer traffic pins ServerName to
+# zephyr-cluster (auto-added by GenerateNodeCert), so these are only needed for
+# ad-hoc debugging like `curl --cacert ca.crt https://127.0.0.1:443/...`.
+CERT_HOSTS := 127.0.0.1,localhost
+
+.PHONY: up down restart build logs status clean ps certs
 
 ## seed: start seed node
 seed: build
 	$(COMPOSE) up -d seed
 
 ## up: scale peers
-up: build
+up: build $(if $(filter 1,$(TLS)),certs)
 	$(COMPOSE) up -d --scale node=$(NODES)
+
+## certs: generate a shared CA + cluster cert under ./certs
+certs:
+	@mkdir -p certs
+	go run ./cmd/gencerts -out ./certs -nodes cluster -hosts $(CERT_HOSTS)
+	@echo "wrote certs for hosts: $(CERT_HOSTS)"
 
 ## down: stop and remove containers
 down:

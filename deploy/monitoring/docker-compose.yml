@@ -8,6 +8,8 @@ services:
     ports:
       - "9090:9090"
     restart: unless-stopped
+    networks:
+      - cluster
 
   grafana:
     image: grafana/grafana-oss:latest
@@ -21,5 +23,15 @@ services:
     restart: unless-stopped
     volumes:
       - grafana-data:/var/lib/grafana
+    networks:
+      - cluster
+
 volumes:
   grafana-data:
+
+# Reuses the network created by the cluster compose project (`make up`),
+# so prometheus can resolve `seed` and `node` directly via Docker DNS.
+networks:
+  cluster:
+    name: zephyr_default
+    external: true

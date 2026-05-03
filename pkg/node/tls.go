@@ -65,8 +65,13 @@ func GenerateCA() (*CA, error) {
 	}, nil
 }
 
+// ClusterServerName is the synthetic SAN every node cert carries. ClientTLSConfig
+// pins this name so peers can dial each other by container ID or IP without
+// hostname mismatches.
+const ClusterServerName = "zephyr-cluster"
+
 // GenerateNodeCert creates a certificate signed by ca valid for the given hosts
-// (IP addresses or DNS names).
+// (IP addresses or DNS names). ClusterServerName is always added to the SAN list.
 func GenerateNodeCert(ca *CA, hosts []string) (*NodeTLSCreds, error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -80,6 +85,7 @@ func GenerateNodeCert(ca *CA, hosts []string) (*NodeTLSCreds, error) {
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 	}
+	template.DNSNames = append(template.DNSNames, ClusterServerName)
 	for _, h := range hosts {
 		if ip := net.ParseIP(h); ip != nil {
 			template.IPAddresses = append(template.IPAddresses, ip)
@@ -130,7 +136,10 @@ func ClientTLSConfig(caPEM []byte, creds *NodeTLSCreds) (*tls.Config, error) {
 	return &tls.Config{
 		Certificates: []tls.Certificate{cert},
 		RootCAs:      pool,
-		MinVersion:   tls.VersionTLS13,
+		// All cluster nodes share one cert containing this SAN; pinning to it
+		// lets us dial peers by container ID / IP without hostname mismatch.
+		ServerName: ClusterServerName,
+		MinVersion: tls.VersionTLS13,
 	}, nil
 }
 

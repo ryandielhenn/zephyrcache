@@ -198,7 +198,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "up{job=\"zephyrcache\"}",
+          "expr": "up{job=~\"zephyrcache-.*\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
