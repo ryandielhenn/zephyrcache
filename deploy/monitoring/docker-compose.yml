@@ -23,6 +23,9 @@ services:
     restart: unless-stopped
     volumes:
       - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      # Dashboard JSON files; the provisioning provider scans this directory.
+      - ./grafana:/var/lib/grafana/dashboards:ro
     networks:
       - cluster
 

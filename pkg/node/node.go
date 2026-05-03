@@ -11,6 +11,7 @@ import (
 
 	"github.com/pion/dtls/v3"
 
+	"github.com/ryandielhenn/zephyrcache/internal/telemetry"
 	"github.com/ryandielhenn/zephyrcache/pkg/gossip"
 	"github.com/ryandielhenn/zephyrcache/pkg/kv"
 	"github.com/ryandielhenn/zephyrcache/pkg/peer"
@@ -181,6 +182,7 @@ func (n *Node) setPeer(id string, updatedPeer peer.Peer) {
 	if shouldRemove || shouldAdd {
 		peerIds := n.getPeerList()
 		slog.Info("Peers", "peer ids", peerIds)
+		telemetry.PeersKnown.Set(float64(n.countPeers() + 1))
 	}
 }
 
@@ -204,6 +206,9 @@ func (n *Node) syncPeers(newPeers map[string]string) {
 			n.ring.Add(id, addr)
 		}
 	}
+
+	// Ring includes self; len() is the cluster-size view.
+	telemetry.PeersKnown.Set(float64(len(n.ring.Nodes())))
 }
 
 func (n *Node) getPeerMap() map[string]peer.Peer {

@@ -41,6 +41,17 @@ var (
 		[]string{"op"},
 	)
 
+	// PeersKnown reports cluster size as this node sees it (including itself).
+	// Compare against count(up{job=~"zephyrcache-.*"}) in PromQL to detect
+	// gossip convergence.
+	PeersKnown = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: "zephyrcache",
+			Name:      "peers_known",
+			Help:      "Cluster members this node is aware of, including itself.",
+		},
+	)
+
 	// ---- Process / build info ----
 	buildInfo = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -63,7 +74,8 @@ var (
 )
 
 func init() {
-	Registry.MustRegister(RequestsTotal, RequestDuration, InFlight, buildInfo, uptime)
+	Registry.MustRegister(RequestsTotal, RequestDuration, InFlight, PeersKnown, buildInfo, uptime)
+	PeersKnown.Set(1) // before any peers are discovered, the node still sees itself
 }
 
 // MetricsHandler exposes /metrics. Mount it with mux.Handle("/metrics", telemetry.MetricsHandler()).
