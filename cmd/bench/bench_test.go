@@ -31,8 +31,8 @@ var (
 type cacheNode struct {
 	httpAddr   string
 	gossipAddr string
+	n          *node.Node
 	cleanup    func()
-	uconn      net.PacketConn
 }
 
 func startNode(id, seedGossipAddr string) cacheNode {
@@ -50,6 +50,7 @@ func startNode(id, seedGossipAddr string) cacheNode {
 	}
 	gossipPort := strconv.Itoa(uconn.LocalAddr().(*net.UDPAddr).Port)
 	gossipAddr := uconn.LocalAddr().String()
+	_ = uconn.Close()
 
 	config := node.ConfigWithOpts(id, httpAddr, gossipPort, *nReplicas, 50)
 
@@ -67,16 +68,8 @@ func startNode(id, seedGossipAddr string) cacheNode {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/kv/", func(w http.ResponseWriter, req *http.Request) {
-		switch req.Method {
-		case http.MethodPut, http.MethodPost:
-			n.Put(w, req)
-		case http.MethodGet:
-			n.Get(w, req)
-		case http.MethodDelete:
-			n.Del(w, req)
-		}
-	})
+	mux.HandleFunc("/kv/", n.KvEventCallback())
+	mux.HandleFunc("/replica/", n.ReplicaEventCallback())
 	srv := &http.Server{Handler: mux}
 	go func() {
 		if err := srv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -87,10 +80,9 @@ func startNode(id, seedGossipAddr string) cacheNode {
 	return cacheNode{
 		httpAddr:   httpAddr,
 		gossipAddr: gossipAddr,
-		uconn:      uconn,
+		n:          n,
 		cleanup: func() {
 			_ = srv.Close()
-			_ = uconn.Close()
 			cancel()
 			n.Cleanup()
 		},
@@ -112,7 +104,21 @@ func TestMain(m *testing.M) {
 		nodes[i] = startNode(fmt.Sprintf("node%d", i), nodes[0].gossipAddr)
 	}
 
-	time.Sleep(500 * time.Millisecond)
+	// Wait for cluster convergence: every node must see all other peers.
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		converged := true
+		for _, nd := range nodes {
+			if nd.n.PeerCount() < *numNodes-1 {
+				converged = false
+				break
+			}
+		}
+		if converged {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 
 	testAddrs = make([]string, *numNodes)
 	for i, nd := range nodes {
@@ -150,14 +156,15 @@ func BenchmarkPutGet(b *testing.B) {
 			defer func() { <-sem }()
 			addr := testAddrs[counter.Add(1)%uint64(len(testAddrs))]
 			key := fmt.Sprintf("k%d", i)
-			_, _ = testClient.Post(addr+"/kv/"+key, "application/octet-stream", bytes.NewReader(payload))
-			resp, _ := testClient.Get(addr + "/kv/" + key)
-			if resp != nil {
-				_, err := io.Copy(io.Discard, resp.Body)
-				if err != nil {
-					slog.Info("Error draining response")
-				}
-				_ = resp.Body.Close()
+			putResp, _ := testClient.Post(addr+"/kv/"+key, "application/octet-stream", bytes.NewReader(payload))
+			if putResp != nil {
+				_, _ = io.Copy(io.Discard, putResp.Body)
+				_ = putResp.Body.Close()
+			}
+			getResp, _ := testClient.Get(addr + "/kv/" + key)
+			if getResp != nil {
+				_, _ = io.Copy(io.Discard, getResp.Body)
+				_ = getResp.Body.Close()
 			}
 		}(i)
 	}

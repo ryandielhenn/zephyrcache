@@ -152,6 +152,13 @@ func (n *Node) removeGossip() *gossip.MessagePayload {
 	return msg
 }
 
+// PeerCount returns the number of alive peers this node knows about.
+func (n *Node) PeerCount() int {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.countPeers()
+}
+
 func (n *Node) countPeers() int {
 	count := 0
 	for _, peerBody := range n.peers {
