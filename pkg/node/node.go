@@ -19,19 +19,19 @@ import (
 )
 
 type Node struct {
-	kv            *kv.Store
-	ring          *ring.HashRing
-	gossipQueue   []*gossip.MessagePayload
-	peers         map[string]peer.Peer
-	dtlsConns     map[string]*dtls.Conn
-	incarnation   int
-	targetPeer    string
-	timeout       *time.Timer
-	mu            sync.Mutex
-	config           *NodeConfig
-	serverTLS        *tls.Config
-	clientFacingTLS  *tls.Config
-	replicaClient    *http.Client
+	kv              *kv.Store
+	ring            *ring.HashRing
+	gossipQueue     []*gossip.MessagePayload
+	peers           map[string]peer.Peer
+	dtlsConns       map[string]*dtls.Conn
+	incarnation     int
+	targetPeer      string
+	timeout         *time.Timer
+	mu              sync.Mutex
+	config          *NodeConfig
+	serverTLS       *tls.Config
+	clientFacingTLS *tls.Config
+	replicaClient   *http.Client
 }
 
 type NodeConfig struct {
