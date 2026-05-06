@@ -274,6 +274,7 @@ func (n *Node) sendGossip(msg *gossip.Message, addr string) {
 				}),
 				dtls.WithPSKIdentityHint([]byte("zephyr")),
 				dtls.WithCipherSuites(dtls.TLS_PSK_WITH_AES_128_CCM),
+				dtls.WithExtendedMasterSecret(dtls.DisableExtendedMasterSecret),
 			)
 			if err != nil {
 				slog.Error("sendGossip dial (PSK) failed", "addr", addr, "err", err)
@@ -363,6 +364,7 @@ func StartGossipListener(ctx context.Context, node *Node) {
 			}),
 			dtls.WithPSKIdentityHint([]byte("zephyr")),
 			dtls.WithCipherSuites(dtls.TLS_PSK_WITH_AES_128_CCM),
+			dtls.WithExtendedMasterSecret(dtls.DisableExtendedMasterSecret),
 		)
 		if err != nil {
 			slog.Error("gossip listener (PSK) failed", "err", err)

@@ -1,6 +1,5 @@
-// gencerts generates a CA and per-node TLS certificates for a ZephyrCache
-// cluster. Each node gets one cert used for both the replica (mTLS) and KV
-// (one-way TLS) endpoints.
+// gencerts generates a CA, per-node replica certs (mTLS for node-to-node
+// traffic), and a shared client cert (one-way TLS for client-to-node traffic).
 //
 // Usage:
 //
@@ -43,8 +42,10 @@ func main() {
 	write(*outDir, "ca.key", ca.KeyPEM)
 	fmt.Printf("wrote %s/ca.crt  %s/ca.key\n", *outDir, *outDir)
 
+	abs, _ := filepath.Abs(*outDir)
+
 	fmt.Println()
-	fmt.Println("Per-node environment variables:")
+	fmt.Println("Per-node environment variables (node-to-node mTLS):")
 	fmt.Println()
 
 	for _, id := range nodeIDs {
@@ -57,15 +58,27 @@ func main() {
 		write(*outDir, certFile, creds.CertPEM)
 		write(*outDir, keyFile, creds.KeyPEM)
 
-		abs, _ := filepath.Abs(*outDir)
 		fmt.Printf("# %s\n", id)
 		fmt.Printf("export REPLICA_CA_FILE=%s/ca.crt\n", abs)
 		fmt.Printf("export REPLICA_CERT_FILE=%s/%s\n", abs, certFile)
 		fmt.Printf("export REPLICA_KEY_FILE=%s/%s\n", abs, keyFile)
-		fmt.Printf("export KV_CERT_FILE=%s/%s\n", abs, certFile)
-		fmt.Printf("export KV_KEY_FILE=%s/%s\n", abs, keyFile)
 		fmt.Println()
 	}
+
+	// Dedicated cert for client-facing TLS (one-way TLS, shared across all nodes).
+	clientCreds, err := node.GenerateNodeCert(ca, hosts)
+	if err != nil {
+		log.Fatalf("generate client cert: %v", err)
+	}
+	write(*outDir, "client.crt", clientCreds.CertPEM)
+	write(*outDir, "client.key", clientCreds.KeyPEM)
+	fmt.Printf("wrote %s/client.crt  %s/client.key\n", *outDir, *outDir)
+	fmt.Println()
+	fmt.Println("Client-facing environment variables (shared across all nodes):")
+	fmt.Println()
+	fmt.Printf("export CLIENT_CERT_FILE=%s/client.crt\n", abs)
+	fmt.Printf("export CLIENT_KEY_FILE=%s/client.key\n", abs)
+	fmt.Println()
 }
 
 func write(dir, name string, data []byte) {

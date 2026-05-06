@@ -28,9 +28,10 @@ type Node struct {
 	targetPeer    string
 	timeout       *time.Timer
 	mu            sync.Mutex
-	config        *NodeConfig
-	serverTLS     *tls.Config
-	replicaClient *http.Client
+	config           *NodeConfig
+	serverTLS        *tls.Config
+	clientFacingTLS  *tls.Config
+	replicaClient    *http.Client
 }
 
 type NodeConfig struct {
@@ -101,6 +102,17 @@ func (n *Node) SetReplicaTLS(serverTLS, clientTLS *tls.Config) {
 // or nil when TLS is not configured.
 func (n *Node) ServerTLSConfig() *tls.Config {
 	return n.serverTLS
+}
+
+// SetClientFacingTLS configures TLS for the client-facing HTTP server.
+func (n *Node) SetClientFacingTLS(cfg *tls.Config) {
+	n.clientFacingTLS = cfg
+}
+
+// ClientFacingTLSConfig returns the TLS config for the client-facing server,
+// or nil when TLS is not configured.
+func (n *Node) ClientFacingTLSConfig() *tls.Config {
+	return n.clientFacingTLS
 }
 
 // LocalGet reads a key directly from this node's local KV store,

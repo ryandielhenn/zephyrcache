@@ -35,6 +35,9 @@ func main() {
 	if err := node.ConfigureTLS(n); err != nil {
 		log.Fatal(err)
 	}
+	if err := node.ConfigureClientFacingTLS(n); err != nil {
+		log.Fatal(err)
+	}
 	switch membershipService {
 	case "etcd":
 		cleanup := n.JoinEtcd()
@@ -92,8 +95,18 @@ func main() {
 		})
 	clientFacingAddr := ":8080"
 	slog.Info("ZephyrCache node listening to clients on", "addr", clientFacingAddr)
-	if err := http.ListenAndServe(clientFacingAddr, clientMux); err != nil {
-		slog.Error("ZephyrCache client api error", "err", err)
-
+	clientSrv := &http.Server{
+		Addr:      clientFacingAddr,
+		Handler:   clientMux,
+		TLSConfig: n.ClientFacingTLSConfig(),
+	}
+	var clientErr error
+	if n.ClientFacingTLSConfig() != nil {
+		clientErr = clientSrv.ListenAndServeTLS("", "")
+	} else {
+		clientErr = clientSrv.ListenAndServe()
+	}
+	if clientErr != nil {
+		slog.Error("ZephyrCache client api error", "err", clientErr)
 	}
 }

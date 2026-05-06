@@ -6,6 +6,10 @@ services:
       - REPLICA_CA_FILE=/certs/ca.crt
       - REPLICA_CERT_FILE=/certs/cluster.crt
       - REPLICA_KEY_FILE=/certs/cluster.key
+      - CLIENT_CERT_FILE=/certs/client.crt
+      - CLIENT_KEY_FILE=/certs/client.key
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- --no-check-certificate https://localhost:8080/healthz >/dev/null 2>&1 || exit 1"]
 
   node:
     volumes:
@@ -14,3 +18,7 @@ services:
       - REPLICA_CA_FILE=/certs/ca.crt
       - REPLICA_CERT_FILE=/certs/cluster.crt
       - REPLICA_KEY_FILE=/certs/cluster.key
+      - CLIENT_CERT_FILE=/certs/client.crt
+      - CLIENT_KEY_FILE=/certs/client.key
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- --no-check-certificate https://localhost:8080/healthz >/dev/null 2>&1 || exit 1"]

@@ -143,6 +143,49 @@ func ClientTLSConfig(caPEM []byte, creds *NodeTLSCreds) (*tls.Config, error) {
 	}, nil
 }
 
+// ClientFacingServerTLSConfig returns a *tls.Config for the client-facing HTTPS
+// server. Unlike the replication endpoint, clients are not required to present
+// certificates (one-way TLS).
+func ClientFacingServerTLSConfig(creds *NodeTLSCreds) (*tls.Config, error) {
+	cert, err := tls.X509KeyPair(creds.CertPEM, creds.KeyPEM)
+	if err != nil {
+		return nil, err
+	}
+	return &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS13,
+	}, nil
+}
+
+// ConfigureClientFacingTLS reads CLIENT_CERT_FILE and CLIENT_KEY_FILE from the
+// environment. When unset it falls back to REPLICA_CERT_FILE / REPLICA_KEY_FILE.
+// If no cert is available the client endpoint stays on plain HTTP.
+func ConfigureClientFacingTLS(n *Node) error {
+	certFile := os.Getenv("CLIENT_CERT_FILE")
+	keyFile := os.Getenv("CLIENT_KEY_FILE")
+	if certFile == "" || keyFile == "" {
+		certFile = os.Getenv("REPLICA_CERT_FILE")
+		keyFile = os.Getenv("REPLICA_KEY_FILE")
+	}
+	if certFile == "" || keyFile == "" {
+		return nil
+	}
+	certPEM, err := os.ReadFile(certFile)
+	if err != nil {
+		return err
+	}
+	keyPEM, err := os.ReadFile(keyFile)
+	if err != nil {
+		return err
+	}
+	cfg, err := ClientFacingServerTLSConfig(&NodeTLSCreds{CertPEM: certPEM, KeyPEM: keyPEM})
+	if err != nil {
+		return err
+	}
+	n.SetClientFacingTLS(cfg)
+	return nil
+}
+
 // configureTLS reads REPLICA_CERT_FILE, REPLICA_KEY_FILE, and REPLICA_CA_FILE
 // from the environment and, when all three are set, enables mTLS for the
 // replication endpoint. If none are set the node runs without TLS.
