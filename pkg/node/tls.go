@@ -157,38 +157,11 @@ func ClientFacingServerTLSConfig(creds *NodeTLSCreds) (*tls.Config, error) {
 	}, nil
 }
 
-// ConfigureClientFacingTLS reads CLIENT_CERT_FILE and CLIENT_KEY_FILE from the
-// environment. When unset it falls back to REPLICA_CERT_FILE / REPLICA_KEY_FILE.
-// If no cert is available the client endpoint stays on plain HTTP.
-func ConfigureClientFacingTLS(n *Node) error {
-	certFile := os.Getenv("CLIENT_CERT_FILE")
-	keyFile := os.Getenv("CLIENT_KEY_FILE")
-	if certFile == "" || keyFile == "" {
-		certFile = os.Getenv("REPLICA_CERT_FILE")
-		keyFile = os.Getenv("REPLICA_KEY_FILE")
-	}
-	if certFile == "" || keyFile == "" {
-		return nil
-	}
-	certPEM, err := os.ReadFile(certFile)
-	if err != nil {
-		return err
-	}
-	keyPEM, err := os.ReadFile(keyFile)
-	if err != nil {
-		return err
-	}
-	cfg, err := ClientFacingServerTLSConfig(&NodeTLSCreds{CertPEM: certPEM, KeyPEM: keyPEM})
-	if err != nil {
-		return err
-	}
-	n.SetClientFacingTLS(cfg)
-	return nil
-}
-
 // configureTLS reads REPLICA_CERT_FILE, REPLICA_KEY_FILE, and REPLICA_CA_FILE
 // from the environment and, when all three are set, enables mTLS for the
-// replication endpoint. If none are set the node runs without TLS.
+// replication endpoint. The client-facing endpoint uses CLIENT_CERT_FILE /
+// CLIENT_KEY_FILE, falling back to the replica cert/key. If none are set the
+// node runs without TLS.
 func ConfigureTLS(n *Node) error {
 	certFile := os.Getenv("REPLICA_CERT_FILE")
 	keyFile := os.Getenv("REPLICA_KEY_FILE")
@@ -218,5 +191,23 @@ func ConfigureTLS(n *Node) error {
 		return err
 	}
 	n.SetReplicaTLS(serverTLS, clientTLS)
+
+	clientCreds := creds
+	if cf, kf := os.Getenv("CLIENT_CERT_FILE"), os.Getenv("CLIENT_KEY_FILE"); cf != "" && kf != "" {
+		cPEM, err := os.ReadFile(cf)
+		if err != nil {
+			return err
+		}
+		kPEM, err := os.ReadFile(kf)
+		if err != nil {
+			return err
+		}
+		clientCreds = &NodeTLSCreds{CertPEM: cPEM, KeyPEM: kPEM}
+	}
+	clientFacingTLS, err := ClientFacingServerTLSConfig(clientCreds)
+	if err != nil {
+		return err
+	}
+	n.SetClientFacingTLS(clientFacingTLS)
 	return nil
 }

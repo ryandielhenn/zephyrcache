@@ -35,9 +35,6 @@ func main() {
 	if err := node.ConfigureTLS(n); err != nil {
 		log.Fatal(err)
 	}
-	if err := node.ConfigureClientFacingTLS(n); err != nil {
-		log.Fatal(err)
-	}
 	switch membershipService {
 	case "etcd":
 		cleanup := n.JoinEtcd()
