@@ -96,7 +96,7 @@ var (
 
 func TestMain(m *testing.M) {
 	flag.Parse()
-	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn})))
 
 	nodes := make([]cacheNode, *numNodes)
 	nodes[0] = startNode("node0", "")

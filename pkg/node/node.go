@@ -54,8 +54,21 @@ func NewNode(config *NodeConfig) *Node {
 		dtlsConns:     make(map[string]*dtls.Conn),
 		incarnation:   0,
 		config:        config,
-		replicaClient: http.DefaultClient,
+		replicaClient: newReplicaClient(nil),
 	}
+}
+
+// The default transport caps idle conns per host at 2, which causes most
+// connections to be closed after each request under load.
+// This potentially drains the 127.0.0.1 ephemeral-port space.
+// Size the idle pool for sustained peer-to-peer fan-out so connections
+// actually get reused.
+func newReplicaClient(tlsCfg *tls.Config) *http.Client {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.MaxIdleConnsPerHost = 128
+	t.MaxIdleConns = 1024
+	t.TLSClientConfig = tlsCfg
+	return &http.Client{Transport: t}
 }
 
 func (n *Node) KvEventCallback() func(http.ResponseWriter, *http.Request) {
@@ -93,9 +106,7 @@ func (n *Node) ReplicaEventCallback() func(http.ResponseWriter, *http.Request) {
 // when this node calls replicas.
 func (n *Node) SetReplicaTLS(serverTLS, clientTLS *tls.Config) {
 	n.serverTLS = serverTLS
-	t := http.DefaultTransport.(*http.Transport).Clone()
-	t.TLSClientConfig = clientTLS
-	n.replicaClient = &http.Client{Transport: t}
+	n.replicaClient = newReplicaClient(clientTLS)
 }
 
 // ServerTLSConfig returns the TLS config for the replication server,
