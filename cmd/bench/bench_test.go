@@ -52,7 +52,7 @@ func startNode(id, seedGossipAddr string) cacheNode {
 	gossipAddr := uconn.LocalAddr().String()
 	_ = uconn.Close()
 
-	config := node.ConfigWithOpts(id, httpAddr, gossipPort, *nReplicas, 50)
+	config := node.ConfigWithOpts(id, httpAddr, gossipPort, *nReplicas, 50, 50, 150*time.Millisecond)
 
 	ctx, cancel := context.WithCancel(parent)
 
@@ -61,7 +61,6 @@ func startNode(id, seedGossipAddr string) cacheNode {
 	go node.StartGossipPinger(ctx, n,
 		node.WithPeriod(50*time.Millisecond),
 		node.WithPingTimeout(25*time.Millisecond),
-		node.WithSuspectedTimeout(150*time.Millisecond),
 	)
 	if seedGossipAddr != "" {
 		go n.ConnectToCluster(seedGossipAddr, 50*time.Millisecond)

@@ -102,21 +102,25 @@ func Config() *NodeConfig {
 		replicationFactor = 3
 	}
 	return &NodeConfig{
-		maxGossipLen: 50,
-		id:           id,
-		addr:         addr,
-		nReplicas:    replicationFactor,
-		gossipPort:   gossipPort,
+		maxGossipLen:     50,
+		maxGossipMsgLen:  50,
+		id:               id,
+		addr:             addr,
+		nReplicas:        replicationFactor,
+		gossipPort:       gossipPort,
+		suspectedTimeout: 600 * time.Millisecond,
 	}
 }
 
 // Generate node config, manual passing of configs for tests/benchmarks
-func ConfigWithOpts(id, addr, gossipPort string, nReplicas, gossipQueueLen int) *NodeConfig {
+func ConfigWithOpts(id, addr, gossipPort string, nReplicas, gossipQueueLen int, gossipMessageLen int, suspectedTimeout time.Duration) *NodeConfig {
 	return &NodeConfig{
-		maxGossipLen: gossipQueueLen,
-		id:           id,
-		addr:         addr,
-		nReplicas:    nReplicas,
-		gossipPort:   gossipPort,
+		maxGossipLen:     gossipQueueLen,
+		maxGossipMsgLen:  gossipMessageLen,
+		id:               id,
+		addr:             addr,
+		nReplicas:        nReplicas,
+		gossipPort:       gossipPort,
+		suspectedTimeout: suspectedTimeout,
 	}
 }

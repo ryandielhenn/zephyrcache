@@ -59,7 +59,7 @@ func newTLSNode(t *testing.T, id string, ca *CA, hosts []string, nReplicas int, 
 	gossipAddr := uconn.LocalAddr().String()
 	_ = uconn.Close()
 
-	cfg := ConfigWithOpts(id, addr, gossipPort, nReplicas, 50)
+	cfg := ConfigWithOpts(id, addr, gossipPort, nReplicas, 50, 50, 150*time.Millisecond)
 	n := NewNode(cfg)
 	n.SetReplicaTLS(serverTLS, clientTLS)
 
@@ -69,7 +69,6 @@ func newTLSNode(t *testing.T, id string, ca *CA, hosts []string, nReplicas int, 
 	go StartGossipPinger(ctx, n,
 		WithPeriod(50*time.Millisecond),
 		WithPingTimeout(25*time.Millisecond),
-		WithSuspectedTimeout(150*time.Millisecond),
 	)
 	if seedGossipAddr != "" {
 		go n.ConnectToCluster(seedGossipAddr, 50*time.Millisecond)
@@ -163,7 +162,7 @@ func TestReplicationPut(t *testing.T) {
 		t.Fatalf("GenerateCA: %v", err)
 	}
 
-	const numNodes = 3
+	const numNodes = 10
 	nodes := make([]tlsNode, numNodes)
 	nodes[0] = newTLSNode(t, "node0", ca, []string{"127.0.0.1"}, numNodes, "")
 	for i := 1; i < numNodes; i++ {
@@ -221,7 +220,7 @@ func TestReplicationDelete(t *testing.T) {
 		t.Fatalf("GenerateCA: %v", err)
 	}
 
-	const numNodes = 3
+	const numNodes = 10
 	nodes := make([]tlsNode, numNodes)
 	nodes[0] = newTLSNode(t, "node0", ca, []string{"127.0.0.1"}, numNodes, "")
 	for i := 1; i < numNodes; i++ {

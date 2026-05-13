@@ -3,6 +3,7 @@ package node
 import (
 	"crypto/tls"
 	"log/slog"
+	"maps"
 	"math"
 	"math/rand"
 	"net/http"
@@ -17,6 +18,9 @@ import (
 	"github.com/ryandielhenn/zephyrcache/pkg/peer"
 	"github.com/ryandielhenn/zephyrcache/pkg/ring"
 )
+
+const GOSSIP_PORT_DEFAULT string = "4000"
+const PEER_PORT_DEFAULT string = "443"
 
 type Node struct {
 	kv              *kv.Store
@@ -35,11 +39,13 @@ type Node struct {
 }
 
 type NodeConfig struct {
-	id           string
-	addr         string
-	gossipPort   string
-	maxGossipLen int
-	nReplicas    int
+	id               string
+	addr             string
+	gossipPort       string
+	maxGossipLen     int
+	maxGossipMsgLen  int
+	nReplicas        int
+	suspectedTimeout time.Duration
 }
 
 func NewNode(config *NodeConfig) *Node {
@@ -151,10 +157,15 @@ func (n *Node) enqGossip(newMsg *gossip.MessagePayload) {
 			}
 		}
 	}
-	if len(newMsg.Peers) == 0 || len(n.gossipQueue) == n.config.maxGossipLen {
-		return
+	// break up gossip into minimal msgs
+	for id, newPeer := range newMsg.Peers {
+		if len(n.gossipQueue) == n.config.maxGossipLen {
+			return
+		}
+		peers := map[string]peer.Peer{id: newPeer}
+		n.gossipQueue = append(n.gossipQueue,
+			gossip.NewPayload(peers, newMsg.TransmitCount != 0))
 	}
-	n.gossipQueue = append(n.gossipQueue, newMsg)
 }
 
 func (n *Node) prependGossip(msg *gossip.MessagePayload) {
@@ -173,6 +184,22 @@ func (n *Node) removeGossip() *gossip.MessagePayload {
 		n.gossipQueue = append(n.gossipQueue, msg)
 	}
 	return msg
+}
+
+func (n *Node) removeKGossip(k int) *gossip.MessagePayload {
+	if len(n.gossipQueue) < k {
+		k = len(n.gossipQueue)
+	}
+	peers := make(map[string]peer.Peer)
+	for range k {
+		msg := n.removeGossip()
+		maps.Copy(peers, msg.Peers)
+	}
+	return gossip.NewPayload(peers, false)
+}
+
+func (n *Node) removeMaxGossip() *gossip.MessagePayload {
+	return n.removeKGossip(n.config.maxGossipMsgLen)
 }
 
 // PeerCount returns the number of alive peers this node knows about.
@@ -241,14 +268,39 @@ func (n *Node) syncPeers(newPeers map[string]string) {
 	telemetry.PeersKnown.Set(float64(len(n.ring.Nodes())))
 }
 
-func (n *Node) getPeerMap() map[string]peer.Peer {
-	peerMap := make(map[string]peer.Peer)
+func (n *Node) getPeerSubset(numPeers int) map[string]peer.Peer {
+	if numPeers <= 0 {
+		return map[string]peer.Peer{}
+	}
+
+	eligible := make([]struct {
+		id   string
+		body peer.Peer
+	}, 0, len(n.peers))
+
 	for peerId, peerBody := range n.peers {
 		if peerBody.Status == peer.Dead {
 			continue
 		}
-		peerMap[peerId] = peerBody
+		eligible = append(eligible, struct {
+			id   string
+			body peer.Peer
+		}{id: peerId, body: peerBody})
 	}
+
+	if numPeers > len(eligible) {
+		numPeers = len(eligible)
+	}
+
+	rand.Shuffle(len(eligible), func(i, j int) {
+		eligible[i], eligible[j] = eligible[j], eligible[i]
+	})
+
+	peerMap := make(map[string]peer.Peer, numPeers)
+	for i := 0; i < numPeers; i++ {
+		peerMap[eligible[i].id] = eligible[i].body
+	}
+
 	return peerMap
 }
 

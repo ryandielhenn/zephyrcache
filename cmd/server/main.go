@@ -53,7 +53,6 @@ func main() {
 		go node.StartGossipPinger(ctx, n,
 			node.WithPeriod(200*time.Millisecond),
 			node.WithPingTimeout(100*time.Millisecond),
-			node.WithSuspectedTimeout(600*time.Millisecond),
 		)
 	}
 
