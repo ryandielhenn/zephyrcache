@@ -142,6 +142,7 @@ func TestMain(m *testing.M) {
 
 func BenchmarkPutGet(b *testing.B) {
 	var counter atomic.Uint64
+	var failed atomic.Uint64
 	payload := bytes.Repeat([]byte{byte(rand.Intn(255))}, *valSize)
 	sem := make(chan struct{}, *conc)
 	var wg sync.WaitGroup
@@ -155,12 +156,20 @@ func BenchmarkPutGet(b *testing.B) {
 			defer func() { <-sem }()
 			addr := testAddrs[counter.Add(1)%uint64(len(testAddrs))]
 			key := fmt.Sprintf("k%d", i)
-			putResp, _ := testClient.Post(addr+"/kv/"+key, "application/octet-stream", bytes.NewReader(payload))
+
+			putResp, err := testClient.Post(addr+"/kv/"+key, "application/octet-stream", bytes.NewReader(payload))
+			if err != nil || putResp.StatusCode >= 300 {
+				failed.Add(1)
+			}
 			if putResp != nil {
 				_, _ = io.Copy(io.Discard, putResp.Body)
 				_ = putResp.Body.Close()
 			}
-			getResp, _ := testClient.Get(addr + "/kv/" + key)
+
+			getResp, err := testClient.Get(addr + "/kv/" + key)
+			if err != nil || getResp.StatusCode != http.StatusOK {
+				failed.Add(1)
+			}
 			if getResp != nil {
 				_, _ = io.Copy(io.Discard, getResp.Body)
 				_ = getResp.Body.Close()
@@ -171,4 +180,6 @@ func BenchmarkPutGet(b *testing.B) {
 
 	elapsed := b.Elapsed()
 	b.ReportMetric(float64(b.N*2)/elapsed.Seconds(), "ops/s")
+	b.ReportMetric(float64(b.N)/elapsed.Seconds(), "op-pairs/s")
+	b.ReportMetric(float64(failed.Load()), "failed-ops")
 }
